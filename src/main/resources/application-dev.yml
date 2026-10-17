@@ -1,0 +1,9 @@
+spring:
+  jpa:
+    show-sql: true
+
+logging:
+  level:
+    root: INFO
+    vn.edu.ptit.library: DEBUG
+    org.hibernate.SQL: DEBUG
