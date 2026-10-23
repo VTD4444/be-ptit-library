@@ -49,11 +49,13 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/actuator/**",
+                                "/api/auth/**",
                                 "/api/v1/auth/**"
                         ).permitAll()
-                        // Public read-only catalog & search
-                        .requestMatchers(HttpMethod.GET, "/api/v1/catalog/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/search/**").permitAll()
+                        // Public read-only catalog, search & departments
+                        .requestMatchers(HttpMethod.GET, "/api/departments/**", "/api/v1/departments/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/catalog/**", "/api/v1/catalog/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/search/**", "/api/v1/search/**").permitAll()
                         // All other endpoints require authentication
                         .anyRequest().authenticated()
                 );

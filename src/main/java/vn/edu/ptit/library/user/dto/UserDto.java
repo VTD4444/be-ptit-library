@@ -27,4 +27,8 @@ public class UserDto {
     private Integer enrollmentYear;
     private String status;
     private OffsetDateTime cardExpiry;
+    private String phone;
+    private String address;
+    private String lockReason;
+    private Long debt;
 }
