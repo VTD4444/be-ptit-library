@@ -8,12 +8,17 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import vn.edu.ptit.library.common.dto.ApiResponse;
 import vn.edu.ptit.library.common.dto.PageResponse;
 import vn.edu.ptit.library.common.dto.PaginationRequest;
+import vn.edu.ptit.library.common.util.SecurityUtils;
+import vn.edu.ptit.library.user.dto.UpdateProfileRequest;
 import vn.edu.ptit.library.user.dto.UserDto;
+import vn.edu.ptit.library.user.dto.UserProfileResponse;
 import vn.edu.ptit.library.user.service.UserService;
 
 import java.util.UUID;
@@ -25,6 +30,20 @@ import java.util.UUID;
 public class UserController {
 
     private final UserService userService;
+
+    @GetMapping("/profile")
+    @Operation(summary = "Xem thong tin ca nhan hien tai")
+    public ApiResponse<UserProfileResponse> getProfile() {
+        UUID currentUserId = SecurityUtils.getCurrentUserIdOrThrow();
+        return ApiResponse.success(userService.getProfile(currentUserId));
+    }
+
+    @PutMapping("/profile")
+    @Operation(summary = "Cap nhat thong tin lien he ca nhan")
+    public ApiResponse<UserProfileResponse> updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
+        UUID currentUserId = SecurityUtils.getCurrentUserIdOrThrow();
+        return ApiResponse.success("Cập nhật thông tin liên hệ thành công", userService.updateProfile(currentUserId, request));
+    }
 
     @GetMapping("/{id}")
     @Operation(summary = "Xem thong tin chi tiet nguoi dung theo ID")

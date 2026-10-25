@@ -19,4 +19,6 @@ public class LoginRequest {
 
     @NotBlank(message = "Mat khau khong duoc de trong")
     private String password;
+
+    private String loginMethod;
 }

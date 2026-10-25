@@ -18,6 +18,9 @@ public interface CirculationFineRepository extends JpaRepository<CirculationFine
 
     Page<CirculationFine> findByStatus(String status, Pageable pageable);
 
+    @Query("SELECT COALESCE(SUM(cf.fineAmount), 0) FROM CirculationFine cf WHERE cf.circulation.user.id = :userId AND UPPER(cf.status) = 'UNPAID'")
+    Long calculateTotalUnpaidFineByUserId(@Param("userId") UUID userId);
+
     @Query("SELECT f FROM CirculationFine f WHERE f.circulation.user.id = :userId ORDER BY f.createdAt DESC")
     List<CirculationFine> findByUserIdOrderByCreatedAtDesc(@Param("userId") UUID userId);
 

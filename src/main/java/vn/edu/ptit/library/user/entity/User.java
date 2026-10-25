@@ -63,4 +63,13 @@ public class User extends BaseAuditableEntity {
 
     @Column(name = "card_expiry")
     private OffsetDateTime cardExpiry;
+
+    @Column(name = "phone", length = 20)
+    private String phone;
+
+    @Column(name = "address")
+    private String address;
+
+    @Column(name = "lock_reason")
+    private String lockReason;
 }

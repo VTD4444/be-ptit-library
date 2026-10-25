@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import vn.edu.ptit.library.common.dto.ApiResponse;
 import vn.edu.ptit.library.user.dto.LoginRequest;
+import vn.edu.ptit.library.user.dto.RegisterRequest;
 import vn.edu.ptit.library.user.dto.TokenResponse;
 import vn.edu.ptit.library.user.dto.UserDto;
 import vn.edu.ptit.library.user.service.AuthService;
@@ -23,6 +24,12 @@ import vn.edu.ptit.library.user.service.AuthService;
 public class AuthController {
 
     private final AuthService authService;
+
+    @PostMapping("/register")
+    @Operation(summary = "Dang ky tai khoan ban doc moi")
+    public ApiResponse<TokenResponse> register(@Valid @RequestBody RegisterRequest request) {
+        return ApiResponse.created("Dang ky tai khoan thanh cong", authService.register(request));
+    }
 
     @PostMapping("/login")
     @Operation(summary = "Dang nhap bang email hoac ma ban doc")
