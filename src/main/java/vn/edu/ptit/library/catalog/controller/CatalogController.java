@@ -19,7 +19,7 @@ import vn.edu.ptit.library.common.dto.PaginationRequest;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/catalog")
+@RequestMapping("/api/catalog")
 @RequiredArgsConstructor
 @Tag(name = "Catalog", description = "Quan ly danh muc tai lieu, tac gia va ban sach vat ly")
 public class CatalogController {

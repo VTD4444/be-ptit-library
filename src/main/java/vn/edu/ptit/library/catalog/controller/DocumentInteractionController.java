@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/catalog/interactions")
+@RequestMapping("/api/catalog/interactions")
 @RequiredArgsConstructor
 @Tag(name = "Document Interactions", description = "Tuong tac doc gia: Yeu thich va Danh gia tai lieu")
 public class DocumentInteractionController {

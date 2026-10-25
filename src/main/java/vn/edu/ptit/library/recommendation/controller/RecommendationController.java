@@ -14,7 +14,7 @@ import vn.edu.ptit.library.recommendation.service.RecommendationService;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/recommendations")
+@RequestMapping("/api/recommendations")
 @RequiredArgsConstructor
 @Tag(name = "Recommendations", description = "Goi y tai lieu ca nhan hoa dua tren lich su doc, nganh hoc va dac trung vector")
 public class RecommendationController {

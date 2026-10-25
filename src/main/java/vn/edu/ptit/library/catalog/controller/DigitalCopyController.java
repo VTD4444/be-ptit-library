@@ -23,7 +23,7 @@ import java.io.IOException;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/catalog/digital")
+@RequestMapping("/api/catalog/digital")
 @RequiredArgsConstructor
 @Tag(name = "Digital Copies", description = "Quan ly va tai len ban so PDF")
 public class DigitalCopyController {
