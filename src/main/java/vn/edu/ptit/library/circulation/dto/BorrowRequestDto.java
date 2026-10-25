@@ -1,13 +1,14 @@
 package vn.edu.ptit.library.circulation.dto;
 
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.util.UUID;
+import java.util.List;
 
 @Getter
 @Setter
@@ -16,11 +17,11 @@ import java.util.UUID;
 @AllArgsConstructor
 public class BorrowRequestDto {
 
-    @NotNull(message = "Ma dinh danh ban sach vat ly khong duoc de trong")
-    private UUID physicalCopyId;
+    @NotBlank(message = "Ma ban doc (userCode) khong duoc de trong")
+    private String userCode;
 
-    @NotNull(message = "Ma dinh danh ban doc khong duoc de trong")
-    private UUID userId;
+    @NotEmpty(message = "Danh sach ma vach sach can muon (barcodes) khong duoc de trong")
+    private List<@NotBlank(message = "Ma vach sach khong duoc de trong") String> barcodes;
 
     private String borrowNote;
 }

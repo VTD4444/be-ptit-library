@@ -1,22 +1,35 @@
 package vn.edu.ptit.library.circulation.service;
 
 import vn.edu.ptit.library.circulation.dto.BorrowRequestDto;
-import vn.edu.ptit.library.circulation.entity.Circulation;
-import vn.edu.ptit.library.circulation.entity.HoldQueue;
+import vn.edu.ptit.library.circulation.dto.BorrowResponseDto;
+import vn.edu.ptit.library.circulation.dto.CirculationHistoryItemDto;
+import vn.edu.ptit.library.circulation.dto.FinePaymentResponseDto;
+import vn.edu.ptit.library.circulation.dto.HoldCancelResponseDto;
+import vn.edu.ptit.library.circulation.dto.HoldRequestDto;
+import vn.edu.ptit.library.circulation.dto.HoldResponseDto;
+import vn.edu.ptit.library.circulation.dto.RenewRequestDto;
+import vn.edu.ptit.library.circulation.dto.RenewResponseDto;
+import vn.edu.ptit.library.circulation.dto.ReturnRequestDto;
+import vn.edu.ptit.library.circulation.dto.ReturnResponseDto;
+import vn.edu.ptit.library.circulation.dto.UserFinesSummaryDto;
 import vn.edu.ptit.library.common.dto.PageResponse;
 import vn.edu.ptit.library.common.dto.PaginationRequest;
 
-import java.util.UUID;
-
 public interface CirculationService {
 
-    Circulation borrowBook(BorrowRequestDto request);
+    BorrowResponseDto borrowBooks(BorrowRequestDto request);
 
-    Circulation returnBook(Long circulationId, String returnNote);
+    ReturnResponseDto returnBook(ReturnRequestDto request);
 
-    Circulation renewLoan(Long circulationId);
+    RenewResponseDto renewLoan(RenewRequestDto request);
 
-    HoldQueue placeHold(UUID documentId);
+    PageResponse<CirculationHistoryItemDto> getMyCirculationHistory(String status, PaginationRequest request);
 
-    PageResponse<Circulation> getMyLoans(PaginationRequest request);
+    HoldResponseDto placeHold(HoldRequestDto request);
+
+    HoldCancelResponseDto cancelHold(Long holdId, String cancelReason);
+
+    UserFinesSummaryDto getMyFines(String status);
+
+    FinePaymentResponseDto payFine(Long fineId, String paymentNote);
 }

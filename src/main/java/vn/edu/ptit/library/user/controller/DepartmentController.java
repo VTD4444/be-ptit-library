@@ -13,7 +13,7 @@ import vn.edu.ptit.library.user.service.DepartmentService;
 import java.util.List;
 
 @RestController
-@RequestMapping({"/api/departments", "/api/v1/departments"})
+@RequestMapping("/api/departments")
 @RequiredArgsConstructor
 @Tag(name = "Departments", description = "Danh muc khoa va phong ban")
 public class DepartmentController {

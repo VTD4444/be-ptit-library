@@ -18,7 +18,7 @@ import vn.edu.ptit.library.common.dto.PageResponse;
 import vn.edu.ptit.library.common.dto.PaginationRequest;
 
 @RestController
-@RequestMapping("/api/v1/analytics")
+@RequestMapping("/api/analytics")
 @RequiredArgsConstructor
 @Tag(name = "Analytics & Reports", description = "Thong ke tong quan, bao cao kho sach va de xuat bo sung tai lieu")
 public class AnalyticsController {

@@ -13,7 +13,7 @@ import vn.edu.ptit.library.indexing.entity.BackgroundJob;
 import vn.edu.ptit.library.indexing.service.IndexingJobService;
 
 @RestController
-@RequestMapping("/api/v1/indexing/jobs")
+@RequestMapping("/api/indexing/jobs")
 @RequiredArgsConstructor
 @Tag(name = "Indexing Jobs", description = "Quan ly va theo doi tien trinh xu ly nen / boc tach PDF")
 public class IndexingJobController {

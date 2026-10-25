@@ -22,7 +22,7 @@ import vn.edu.ptit.library.user.service.UserService;
 import java.util.UUID;
 
 @RestController
-@RequestMapping({"/api/admin/users", "/api/v1/admin/users"})
+@RequestMapping("/api/admin/users")
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('LIBRARIAN', 'ADMIN')")
 @Tag(name = "Admin Users", description = "Quan ly ban doc danh cho Thu thu va Admin")

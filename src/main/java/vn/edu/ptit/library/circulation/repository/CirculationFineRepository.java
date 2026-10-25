@@ -20,4 +20,13 @@ public interface CirculationFineRepository extends JpaRepository<CirculationFine
 
     @Query("SELECT COALESCE(SUM(cf.fineAmount), 0) FROM CirculationFine cf WHERE cf.circulation.user.id = :userId AND UPPER(cf.status) = 'UNPAID'")
     Long calculateTotalUnpaidFineByUserId(@Param("userId") UUID userId);
+
+    @Query("SELECT f FROM CirculationFine f WHERE f.circulation.user.id = :userId ORDER BY f.createdAt DESC")
+    List<CirculationFine> findByUserIdOrderByCreatedAtDesc(@Param("userId") UUID userId);
+
+    @Query("SELECT f FROM CirculationFine f WHERE f.circulation.user.id = :userId AND f.status = :status ORDER BY f.createdAt DESC")
+    List<CirculationFine> findByUserIdAndStatusOrderByCreatedAtDesc(@Param("userId") UUID userId, @Param("status") String status);
+
+    @Query("SELECT COALESCE(SUM(f.fineAmount), 0) FROM CirculationFine f WHERE f.circulation.id = :circulationId")
+    Long sumFineAmountByCirculationId(@Param("circulationId") Long circulationId);
 }

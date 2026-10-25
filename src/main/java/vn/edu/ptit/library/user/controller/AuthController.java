@@ -18,7 +18,7 @@ import vn.edu.ptit.library.user.dto.UserDto;
 import vn.edu.ptit.library.user.service.AuthService;
 
 @RestController
-@RequestMapping({"/api/auth", "/api/v1/auth"})
+@RequestMapping("/api/auth")
 @RequiredArgsConstructor
 @Tag(name = "Auth", description = "Xac thuc va phan quyen nguoi dung")
 public class AuthController {

@@ -15,7 +15,7 @@ import vn.edu.ptit.library.notification.entity.MessageQueue;
 import vn.edu.ptit.library.notification.service.NotificationService;
 
 @RestController
-@RequestMapping("/api/v1/notifications")
+@RequestMapping("/api/notifications")
 @RequiredArgsConstructor
 @Tag(name = "Notifications", description = "Quan ly thong bao, nhac han tra sach va tin nhan den ban doc")
 public class NotificationController {

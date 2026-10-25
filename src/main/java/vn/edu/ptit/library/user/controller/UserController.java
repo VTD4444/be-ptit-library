@@ -24,7 +24,7 @@ import vn.edu.ptit.library.user.service.UserService;
 import java.util.UUID;
 
 @RestController
-@RequestMapping({"/api/users", "/api/v1/users"})
+@RequestMapping("/api/users")
 @RequiredArgsConstructor
 @Tag(name = "Users", description = "Quan ly nguoi dung va ban doc")
 public class UserController {
