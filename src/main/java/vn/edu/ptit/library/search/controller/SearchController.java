@@ -16,7 +16,7 @@ import vn.edu.ptit.library.search.service.SearchService;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/search")
+@RequestMapping("/api/search")
 @RequiredArgsConstructor
 @Tag(name = "Content Search", description = "Truy van noi dung: Tim kiem vector ngu nghia, vi tri trang/chuong va vi tri sach tren ke")
 public class SearchController {

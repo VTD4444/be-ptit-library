@@ -27,11 +27,21 @@ public enum ErrorCode {
     PHYSICAL_COPY_NOT_FOUND(1201, "Khong tim thay ban sach vat ly", HttpStatus.NOT_FOUND),
     DIGITAL_COPY_NOT_FOUND(1202, "Khong tim thay ban tai lieu so", HttpStatus.NOT_FOUND),
 
-    // --- Circulation & Holds (1300 - 1399) ---
+    // --- Circulation, Holds & Fines (1300 - 1399) ---
     COPY_NOT_AVAILABLE(1300, "Ban sach vat ly hien khong san sang de muon", HttpStatus.BAD_REQUEST),
     LOAN_LIMIT_EXCEEDED(1301, "Ban doc da vuot qua so luong sach duoc phep muon", HttpStatus.BAD_REQUEST),
     RENEWAL_LIMIT_EXCEEDED(1302, "Da dat gioi han so lan gia han cho luot muon nay", HttpStatus.BAD_REQUEST),
     HOLD_ALREADY_EXISTS(1303, "Ban doc da dat truoc tai lieu nay trong hang cho", HttpStatus.CONFLICT),
+    LOAN_NOT_FOUND(1304, "Khong tim thay luot muon sach dang hoat dong", HttpStatus.NOT_FOUND),
+    ALREADY_RETURNED(1305, "Cuon sach nay da duoc ghi nhan tra truoc do", HttpStatus.BAD_REQUEST),
+    HOLD_NOT_FOUND(1306, "Khong tim thay yeu cau dat truoc sach", HttpStatus.NOT_FOUND),
+    HOLD_NOT_ALLOWED_WHEN_AVAILABLE(1307, "Sach hien van con ban san sang tren ke, ban doc co the muon truc tiep", HttpStatus.BAD_REQUEST),
+    HOLD_CANNOT_CANCEL(1308, "Khong the huy yeu cau dat truoc o trang thai hien tai", HttpStatus.BAD_REQUEST),
+    FINE_NOT_FOUND(1309, "Khong tim thay khoan phat", HttpStatus.NOT_FOUND),
+    FINE_ALREADY_PAID(1310, "Khoan phat nay da duoc thanh toan hoac mien giam", HttpStatus.BAD_REQUEST),
+    CANNOT_RENEW_OVERDUE(1311, "Sach da qua han tra, khong the gia han", HttpStatus.BAD_REQUEST),
+    CANNOT_RENEW_ON_HOLD(1312, "Tai lieu dang co ban doc khac dat truoc trong hang cho, khong the gia han", HttpStatus.BAD_REQUEST),
+    ALREADY_BORROWING_DOCUMENT(1313, "Ban doc hien dang muon mot ban cua dau sach nay", HttpStatus.CONFLICT),
 
     // --- Indexing, Search & AI Worker (1400 - 1499) ---
     PYTHON_WORKER_ERROR(1400, "Loi giao tiep voi dich vu xu ly AI/NLP Python", HttpStatus.BAD_GATEWAY),

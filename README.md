@@ -164,12 +164,3 @@ Sau khi ứng dụng khởi chạy thành công tại cổng mặc định `8080
   👉 [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
 * **OpenAPI Schema (JSON specification):**  
   👉 [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
-
----
-
-## 7. Tài Liệu Tham Khảo Liên Quan
-
-* [DECUONG.md](file:///D:/PTIT/Do-an-tot-nghiep/Backend/DECUONG.md): Đề cương chi tiết đồ án tốt nghiệp PTIT.
-* [ARCHITECTURE.md](file:///D:/PTIT/Do-an-tot-nghiep/Backend/ARCHITECTURE.md): Chi tiết kiến trúc hệ thống, quy tắc coding và bảng ánh xạ 25 bảng DB.
-* [docs/implementation_plan.md](file:///D:/PTIT/Do-an-tot-nghiep/Backend/docs/implementation_plan.md): Kế hoạch thiết kế kỹ thuật chi tiết.
-* [docs/walkthrough.md](file:///D:/PTIT/Do-an-tot-nghiep/Backend/docs/walkthrough.md): Báo cáo kết quả kiểm thử và biên dịch.

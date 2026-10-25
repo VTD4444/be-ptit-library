@@ -27,7 +27,7 @@ public class PythonWorkerClient {
     public boolean requestPdfIndexing(PdfIndexRequest request) {
         try {
             restClient.post()
-                    .uri("/api/v1/extract-index")
+                    .uri("/api/extract-index")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(request)
                     .retrieve()
@@ -42,7 +42,7 @@ public class PythonWorkerClient {
     public EmbeddingResponse generateEmbedding(String text, String modelName) {
         try {
             return restClient.post()
-                    .uri("/api/v1/embeddings")
+                    .uri("/api/embeddings")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(EmbeddingRequest.builder().text(text).modelName(modelName).build())
                     .retrieve()
