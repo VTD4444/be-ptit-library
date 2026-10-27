@@ -1,5 +1,8 @@
 package vn.edu.ptit.library.catalog.service;
 
+import vn.edu.ptit.library.catalog.dto.DocumentDetailDto;
+import vn.edu.ptit.library.catalog.dto.DocumentFilterRequest;
+import vn.edu.ptit.library.catalog.dto.DocumentRequestDto;
 import vn.edu.ptit.library.catalog.dto.DocumentSummaryDto;
 import vn.edu.ptit.library.catalog.entity.Document;
 import vn.edu.ptit.library.common.dto.PageResponse;
@@ -9,9 +12,15 @@ import java.util.UUID;
 
 public interface CatalogService {
 
-    DocumentSummaryDto getDocumentDetails(UUID id);
+    PageResponse<DocumentSummaryDto> searchDocuments(DocumentFilterRequest filter, PaginationRequest request);
 
-    PageResponse<DocumentSummaryDto> searchDocuments(String keyword, PaginationRequest request);
+    DocumentDetailDto getDocumentDetails(UUID id);
+
+    UUID createDocument(DocumentRequestDto request);
+
+    UUID updateDocument(UUID id, DocumentRequestDto request);
+
+    void deleteDocument(UUID id);
 
     Document getDocumentEntityOrThrow(UUID id);
 }

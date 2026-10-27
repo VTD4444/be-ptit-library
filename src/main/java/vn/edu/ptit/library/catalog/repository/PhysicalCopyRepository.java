@@ -17,6 +17,8 @@ public interface PhysicalCopyRepository extends JpaRepository<PhysicalCopy, UUID
 
     List<PhysicalCopy> findByDocumentId(UUID documentId);
 
+    long countByDocumentId(UUID documentId);
+
     long countByDocumentIdAndStatus(UUID documentId, String status);
 
     @Query("SELECT p FROM PhysicalCopy p WHERE p.document.id = :docId AND p.status = 'AVAILABLE'")
