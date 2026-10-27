@@ -26,6 +26,7 @@ public enum ErrorCode {
     DOCUMENT_NOT_FOUND(1200, "Khong tim thay bieu ghi tai lieu", HttpStatus.NOT_FOUND),
     PHYSICAL_COPY_NOT_FOUND(1201, "Khong tim thay ban sach vat ly", HttpStatus.NOT_FOUND),
     DIGITAL_COPY_NOT_FOUND(1202, "Khong tim thay ban tai lieu so", HttpStatus.NOT_FOUND),
+    AUTHOR_NOT_FOUND(1203, "Khong tim thay tac gia", HttpStatus.NOT_FOUND),
 
     // --- Circulation, Holds & Fines (1300 - 1399) ---
     COPY_NOT_AVAILABLE(1300, "Ban sach vat ly hien khong san sang de muon", HttpStatus.BAD_REQUEST),

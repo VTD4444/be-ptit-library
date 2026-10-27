@@ -14,7 +14,7 @@ import vn.edu.ptit.library.circulation.service.CirculationService;
 import vn.edu.ptit.library.common.dto.ApiResponse;
 
 @RestController
-@RequestMapping("/api/admin/fines")
+@RequestMapping("/api/fines-admin")
 @RequiredArgsConstructor
 @Tag(name = "Admin Fines", description = "Quan ly va ghi nhan thanh toan phi phat tai quay (Librarian, Admin)")
 public class AdminFineController {

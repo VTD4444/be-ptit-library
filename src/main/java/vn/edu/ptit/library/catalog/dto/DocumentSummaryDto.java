@@ -18,15 +18,13 @@ public class DocumentSummaryDto {
 
     private UUID id;
     private String title;
-    private String isbn;
-    private String publisher;
-    private Integer publicationYear;
-    private String language;
-    private String docType;
-    private String classificationNumber;
     private List<String> authors;
+    private String coverUrl;
+    private String abstractText;
+    private String docType;
+    private Integer publicationYear;
+
     private long totalPhysicalCopies;
     private long availablePhysicalCopies;
     private boolean hasDigitalCopy;
-    private Double averageRating;
 }

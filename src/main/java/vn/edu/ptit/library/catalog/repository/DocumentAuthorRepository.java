@@ -13,5 +13,7 @@ public interface DocumentAuthorRepository extends JpaRepository<DocumentAuthor, 
 
     List<DocumentAuthor> findByDocumentIdOrderByAuthorOrderAsc(UUID documentId);
 
+    long countByAuthorId(Long authorId);
+
     void deleteByDocumentId(UUID documentId);
 }

@@ -51,7 +51,7 @@ public class SecurityConfig {
                                 "/actuator/**",
                                 "/api/auth/**"
                         ).permitAll()
-                        // Public read-only catalog, search & departments
+                        // Public read-only catalog (documents, authors), search & departments
                         .requestMatchers(HttpMethod.GET, "/api/departments/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/catalog/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/search/**").permitAll()

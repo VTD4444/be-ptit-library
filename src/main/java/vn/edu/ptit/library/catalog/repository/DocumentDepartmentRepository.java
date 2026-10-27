@@ -14,4 +14,6 @@ public interface DocumentDepartmentRepository extends JpaRepository<DocumentDepa
     List<DocumentDepartment> findByDocumentId(UUID documentId);
 
     List<DocumentDepartment> findByDepartmentId(Long departmentId);
+
+    void deleteByDocumentId(UUID documentId);
 }
