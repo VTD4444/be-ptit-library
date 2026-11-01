@@ -58,3 +58,6 @@ app:
     timeout-seconds: ${PYTHON_WORKER_TIMEOUT_SECONDS:30}
   storage:
     upload-dir: ${FILE_UPLOAD_DIR:./uploads/digital-copies}
+  search:
+    # Nguong do tuong dong cosine TF-IDF toi thieu de coi la khop
+    min-score: ${SEARCH_MIN_SCORE:0.05}

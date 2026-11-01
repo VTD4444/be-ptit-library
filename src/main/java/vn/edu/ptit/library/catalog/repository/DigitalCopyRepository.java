@@ -16,4 +16,6 @@ public interface DigitalCopyRepository extends JpaRepository<DigitalCopy, UUID> 
     Optional<DigitalCopy> findByDocumentIdAndIsCurrentTrue(UUID documentId);
 
     Optional<DigitalCopy> findByFileHash(String fileHash);
+
+    boolean existsByDocumentIdAndFileHashAndProcessingStatusNot(UUID documentId, String fileHash, String processingStatus);
 }

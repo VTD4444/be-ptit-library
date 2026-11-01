@@ -8,9 +8,9 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import vn.edu.ptit.library.common.exception.AppException;
 import vn.edu.ptit.library.common.exception.ErrorCode;
-import vn.edu.ptit.library.integration.python.dto.EmbeddingRequest;
-import vn.edu.ptit.library.integration.python.dto.EmbeddingResponse;
 import vn.edu.ptit.library.integration.python.dto.PdfIndexRequest;
+import vn.edu.ptit.library.integration.python.dto.TfidfSearchRequest;
+import vn.edu.ptit.library.integration.python.dto.TfidfSearchResponse;
 
 import java.util.Map;
 
@@ -39,17 +39,21 @@ public class PythonWorkerClient {
         }
     }
 
-    public EmbeddingResponse generateEmbedding(String text, String modelName) {
+    /**
+     * Tim kiem tren Python Worker: loc Boolean (inverted file) + xep hang TF-IDF/cosine,
+     * gop cac chunk goi nhau thanh doan thong nhat va dinh vi tu khop (positional index).
+     */
+    public TfidfSearchResponse searchTfidf(TfidfSearchRequest request) {
         try {
             return restClient.post()
-                    .uri("/api/embeddings")
+                    .uri("/api/search")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(EmbeddingRequest.builder().text(text).modelName(modelName).build())
+                    .body(request)
                     .retrieve()
-                    .body(EmbeddingResponse.class);
+                    .body(TfidfSearchResponse.class);
         } catch (RestClientException ex) {
-            log.error("Loi khi sinh vector embedding tu Python Worker: {}", ex.getMessage());
-            throw new AppException(ErrorCode.PYTHON_WORKER_ERROR, "Không thể sinh vector ngữ nghĩa cho văn bản: " + ex.getMessage());
+            log.error("Loi khi tim kiem TF-IDF tren Python Worker: {}", ex.getMessage());
+            throw new AppException(ErrorCode.PYTHON_WORKER_ERROR, "Không thể tìm kiếm trên dịch vụ TF-IDF: " + ex.getMessage());
         }
     }
 

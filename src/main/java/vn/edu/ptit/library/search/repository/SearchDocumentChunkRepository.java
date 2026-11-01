@@ -20,32 +20,6 @@ public interface SearchDocumentChunkRepository extends JpaRepository<SearchDocum
     long countByDocumentId(UUID documentId);
 
     /**
-     * Truy van tim kiem ngu nghia (Semantic Vector Search) bang toan tu khoang cach cosine <=> cua pgvector.
-     * Cú pháp CAST(:queryVector AS vector) duoc su dung de tranh loi named parameter cua Spring Data JPA voi dau '::'.
-     */
-    @Query(value = """
-            SELECT c.id AS id,
-                   c.document_id AS documentId,
-                   d.title AS title,
-                   c.chunk_text AS chunkText,
-                   c.page_number AS pageNumber,
-                   c.chapter AS chapter,
-                   c.section AS section,
-                   (1 - (c.embedding <=> CAST(:queryVector AS vector))) AS semanticScore
-            FROM public.search_document_chunks c
-            JOIN public.documents d ON c.document_id = d.id
-            WHERE (:configId IS NULL OR c.search_config_id = :configId)
-              AND d.deleted_at IS NULL
-            ORDER BY c.embedding <=> CAST(:queryVector AS vector)
-            LIMIT :limit
-            """, nativeQuery = true)
-    List<ChunkSearchResultProjection> searchByCosineSimilarity(
-            @Param("queryVector") String queryVector,
-            @Param("configId") Long configId,
-            @Param("limit") int limit
-    );
-
-    /**
      * Truy van tim kiem toan van (Full-Text Search) su dung chi muc nguoc fts_tokens cua PostgreSQL.
      */
     @Query(value = """

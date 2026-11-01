@@ -5,6 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import vn.edu.ptit.library.catalog.repository.DigitalCopyRepository;
+import vn.edu.ptit.library.common.enums.DigitalProcessingStatus;
 import vn.edu.ptit.library.common.enums.JobStatus;
 import vn.edu.ptit.library.common.exception.AppException;
 import vn.edu.ptit.library.common.exception.ErrorCode;
@@ -18,6 +22,7 @@ import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 @Slf4j
 @Service
@@ -26,6 +31,8 @@ public class IndexingJobServiceImpl implements IndexingJobService {
 
     private final BackgroundJobRepository backgroundJobRepository;
     private final PythonWorkerClient pythonWorkerClient;
+    private final DigitalCopyRepository digitalCopyRepository;
+    private final Executor taskExecutor;
 
     @Override
     @Transactional
@@ -37,7 +44,7 @@ public class IndexingJobServiceImpl implements IndexingJobService {
         payload.put("searchConfigId", searchConfigId);
 
         BackgroundJob job = BackgroundJob.builder()
-                .jobType("PDF_EXTRACTION_AND_INDEXING")
+                .jobType(PDF_INDEXING_JOB_TYPE)
                 .targetType("digital_copies")
                 .targetId(digitalCopyId)
                 .payload(payload)
@@ -47,27 +54,50 @@ public class IndexingJobServiceImpl implements IndexingJobService {
 
         BackgroundJob savedJob = backgroundJobRepository.save(job);
 
-        // Goi bat dong bo sang Python Worker
-        triggerWorkerAsync(savedJob.getId(), digitalCopyId, documentId, filePath, searchConfigId);
+        PdfIndexRequest request = PdfIndexRequest.builder()
+                .backgroundJobId(savedJob.getId())
+                .digitalCopyId(digitalCopyId)
+                .documentId(documentId)
+                .filePath(filePath)
+                .searchConfigId(searchConfigId)
+                .build();
+
+        // Python Worker doc job/digital copy tu DB nen chi goi sang sau khi transaction da commit
+        Runnable dispatch = () -> taskExecutor.execute(() -> dispatchToWorker(request));
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    dispatch.run();
+                }
+            });
+        } else {
+            dispatch.run();
+        }
 
         return savedJob;
     }
 
-    @Async("taskExecutor")
-    public void triggerWorkerAsync(Long jobId, UUID digitalCopyId, UUID documentId, String filePath, Long searchConfigId) {
+    private void dispatchToWorker(PdfIndexRequest request) {
         try {
-            PdfIndexRequest request = PdfIndexRequest.builder()
-                    .backgroundJobId(jobId)
-                    .digitalCopyId(digitalCopyId)
-                    .documentId(documentId)
-                    .filePath(filePath)
-                    .searchConfigId(searchConfigId)
-                    .build();
-
             pythonWorkerClient.requestPdfIndexing(request);
         } catch (Exception ex) {
-            log.warn("Khong the thong bao ngay lap tuc cho Python Worker (Job ID: {}): {}", jobId, ex.getMessage());
+            log.warn("Khong the gui job boc tach sang Python Worker (Job ID: {}): {}", request.getBackgroundJobId(), ex.getMessage());
+            markDispatchFailed(request, ex.getMessage());
         }
+    }
+
+    private void markDispatchFailed(PdfIndexRequest request, String reason) {
+        backgroundJobRepository.findById(request.getBackgroundJobId()).ifPresent(job -> {
+            job.setStatus(JobStatus.FAILED.name());
+            job.setErrorMessage("Không gửi được yêu cầu tới Python Worker: " + reason);
+            job.setFinishedAt(OffsetDateTime.now());
+            backgroundJobRepository.save(job);
+        });
+        digitalCopyRepository.findById(request.getDigitalCopyId()).ifPresent(copy -> {
+            copy.setProcessingStatus(DigitalProcessingStatus.FAILED.name());
+            digitalCopyRepository.save(copy);
+        });
     }
 
     @Override
