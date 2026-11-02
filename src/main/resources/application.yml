@@ -48,7 +48,7 @@ springdoc:
 
 app:
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:8443,http://127.0.0.1:8443}
   jwt:
     secret: ${JWT_SECRET:cHRpdC1zbWFydC1saWJyYXJ5LXNlY3JldC1rZXktMjAyNi12ZXJ5LWxvbmctYW5kLXNlY3VyZS1rZXk=}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
