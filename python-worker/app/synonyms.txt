@@ -1,0 +1,6 @@
+# Tu dien dong nghia - moi dong:  tu dai dien: bien the 1, bien the 2
+# Viet tu nhien (co dau, co cach), he thong tu tach tu giong het luc lap chi muc.
+# Sua xong goi POST /api/index/rebuild.
+cơ sở dữ liệu: csdl, database
+máy tính: máy vi tính, computer
+thuật toán: giải thuật, algorithm

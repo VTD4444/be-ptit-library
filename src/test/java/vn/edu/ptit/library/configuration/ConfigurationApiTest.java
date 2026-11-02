@@ -25,7 +25,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest({PolicyAdminController.class, PenaltyTypeAdminController.class, SearchConfigAdminController.class,
-        vn.edu.ptit.library.catalog.controller.CatalogController.class,
+        vn.edu.ptit.library.catalog.controller.DocumentController.class,
         vn.edu.ptit.library.user.controller.AuthController.class, CirculationController.class})
 @Import({SecurityConfig.class, JwtAuthenticationFilter.class, JwtAuthenticationEntryPoint.class})
 class ConfigurationApiTest {
@@ -172,13 +172,13 @@ class ConfigurationApiTest {
 
     @Test
     void existingRoutesAndSecurityRemainAvailable() throws Exception {
-        mvc.perform(get("/api/v1/catalog/documents")).andExpect(status().isOk());
-        mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(get("/api/catalog/documents")).andExpect(status().isOk());
+        mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"username\":\"test\",\"password\":\"test-only\"}"))
                 .andExpect(status().isOk());
-        mvc.perform(post("/api/v1/circulation/borrow").with(user("reader").roles("READER"))
+        mvc.perform(post("/api/circulation/borrow").with(user("reader").roles("READER"))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"userId\":\"00000000-0000-0000-0000-000000000001\",\"physicalCopyId\":\"00000000-0000-0000-0000-000000000002\"}"))
+                .content("{\"userCode\":\"B22DCCN001\",\"barcodes\":[\"BC-0001\"]}"))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(loans);
     }

@@ -72,6 +72,15 @@ public class LocalFileStorageService implements StorageService {
     }
 
     @Override
+    public Path resolveAbsolutePath(String relativePath) {
+        Path file = this.rootLocation.resolve(relativePath).normalize();
+        if (!file.startsWith(this.rootLocation)) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Đường dẫn tệp không hợp lệ");
+        }
+        return file;
+    }
+
+    @Override
     public String calculateSha256(MultipartFile file) throws IOException {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

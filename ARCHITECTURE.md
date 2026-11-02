@@ -75,17 +75,10 @@ src/main/java/vn/edu/ptit/library/
 - Hai bảng `@MapsId` 1-1 (`user_profiles`, `document_embeddings`): `implements Persistable<UUID>` để tránh Hibernate gọi lệnh `merge()` sinh thêm câu `SELECT` thừa khi tạo mới.
 - Bốn bảng khóa phức hợp (`DocumentAuthor`, `DocumentDepartment`, `DocumentSimilarity`, `RecommendationCache`): luôn khởi tạo sẵn `new *Id()` tại trường `@EmbeddedId` để tránh lỗi `NullPointerException` lúc Hibernate copy ID.
 
-### D. Truy vấn Vector (pgvector) và tsvector
-- Các cột `embedding vector` và `fts_tokens tsvector` **không khai báo trực tiếp trong JPA Entity** để tránh lỗi ép kiểu `PGobject`.
-- Truy vấn vector cosine similarity `<=>` hoặc Full-Text Search `@@` được viết bằng `@Query(nativeQuery = true)` trong Repository với cú pháp:
-  ```sql
-  SELECT c.id, c.document_id, (1 - (c.embedding <=> CAST(:queryVector AS vector))) AS semanticScore
-  FROM public.search_document_chunks c
-  WHERE c.search_config_id = :configId
-  ORDER BY c.embedding <=> CAST(:queryVector AS vector)
-  LIMIT :limit
-  ```
-  *(Dùng `CAST(:queryVector AS vector)` thay vì `::vector` để không bị Spring Data JPA hiểu nhầm là named parameter).*
+### D. Tìm kiếm nội dung (TF-IDF) và tsvector
+- Tìm kiếm nội dung dùng **TF-IDF + độ tương đồng cosine** (tài liệu "XỬ LÝ VĂN BẢN") kết hợp **lọc Boolean trên inverted file + positional index** (Lecture 8). Mô hình và dữ liệu vị trí nằm ở Python Worker (`python-worker/data/`, không đổi schema DB); Spring gọi `POST /api/search` nhận các **đoạn đã thống nhất** (chunk gối nhau được gộp) kèm vị trí trang/đoạn/câu/toạ độ, rồi lấy thông tin tài liệu từ DB (`ContentSearchRepository`). Chi tiết: `python-worker/README.md`.
+- Bộ lọc ngôn ngữ / dạng tài liệu / ngành học được Spring tính ra danh sách `documentIds` và gửi kèm để Worker chỉ chấm điểm trong phạm vi đó.
+- Cột `fts_tokens tsvector` vẫn được ghi để **dự phòng Full-Text Search** khi Worker không chạy; cột `embedding vector` hiện không dùng. Cả hai **không khai báo trong JPA Entity** để tránh lỗi ép kiểu `PGobject`, truy vấn bằng SQL native.
 
 ---
 
