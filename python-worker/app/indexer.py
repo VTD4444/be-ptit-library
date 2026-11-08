@@ -5,7 +5,7 @@ from itertools import groupby
 from pathlib import Path
 from uuid import UUID
 
-from app import config, copy_store
+from app import config, copy_store, embedder
 from app.chunker import chunk_words
 from app.db import pool
 from app.pdf_extract import ExtractionResult, extract
@@ -164,6 +164,14 @@ def run_indexing(req: IndexRequest) -> None:
         # 3) Tu dien va IDF phu thuoc toan bo kho => lap chi muc TF-IDF lai tren tat ca chunk
         index = holder.rebuild(req.search_config_id)
 
+        # 4) Embedding loi khong lam hong job: tai lieu van tim duoc bang TF-IDF, sinh bu sau qua /api/embeddings/backfill
+        embedding_failed = False
+        try:
+            embedder.embed_pending(req.digital_copy_id)
+        except Exception:  # noqa: BLE001
+            log.exception("Khong sinh duoc embedding cho ban so %s", req.digital_copy_id)
+            embedding_failed = True
+
         low_quality = not chunks or result.quality < config.LOW_QUALITY_THRESHOLD
         status = "LOW_QUALITY" if low_quality else "INDEXED"
         note = None
@@ -171,6 +179,8 @@ def run_indexing(req: IndexRequest) -> None:
             note = "Không trích xuất được văn bản (có thể là PDF scan, chưa hỗ trợ OCR)"
         elif low_quality:
             note = f"Chỉ {result.quality:.0%} số trang có văn bản trích xuất được"
+        elif embedding_failed:
+            note = "Chưa sinh được embedding, tài liệu tạm thời chỉ tìm được bằng TF-IDF"
 
         with pool.connection() as conn, conn.transaction():
             conn.execute(

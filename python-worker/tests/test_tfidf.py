@@ -1,17 +1,19 @@
 import math
 import os
+from unittest.mock import MagicMock
 
 import numpy as np
+import psycopg
 import pytest
 from scipy import sparse
 
 os.environ.setdefault("DATABASE_URL", "postgresql://unused")
 
-from app import config, copy_store, synonyms  # noqa: E402
+from app import config, copy_store, embedder, searcher, synonyms  # noqa: E402
 from app.boolean_query import And, Not, Or, Phrase, Terms, parse  # noqa: E402
 from app.chunker import chunk_words  # noqa: E402
 from app.copy_store import CopyData  # noqa: E402
-from app.pdf_extract import Heading, Word  # noqa: E402
+from app.pdf_extract import Heading, Word, _clean, _is_chapter_heading  # noqa: E402
 from app.searcher import _evaluate, _find_spans, _locations, _unify  # noqa: E402
 from app.stopwords import STOPWORDS  # noqa: E402
 from app.text_preprocess import ngrams, preprocess, tokenize_words  # noqa: E402
@@ -29,6 +31,147 @@ def tmp_copies(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "COPIES_DIR", tmp_path / "copies")
     copy_store._cache.clear()
     return tmp_path
+
+
+# ---------------------------------------------------------------- Embedding va tim kiem lai
+
+class _StubIndex:
+    def __init__(self, tfidf_hits):
+        self.tfidf_hits = tfidf_hits
+        self.chunk_rows = {"a": 0, "b": 1, "c": 2}
+        self.copies = [{"copyId": "copy-1", "documentId": "doc-1"}]
+
+    def search_chunks(self, text, top_k, allowed=None):
+        return self.tfidf_hits
+
+
+def test_rrf_prefers_chunk_found_by_both_rankings_and_stays_in_unit_range():
+    fused = searcher.reciprocal_rank_fusion([[(0, 0.9), (1, 0.8)], [(2, 0.99), (1, 0.7)]], k=60)
+
+    assert fused[0][0] == 1
+    assert {row for row, _ in fused} == {0, 1, 2}
+    assert all(0 < score <= 1 for _, score in fused)
+
+
+def test_rrf_gives_one_to_chunk_ranked_first_everywhere():
+    assert searcher.reciprocal_rank_fusion([[(0, 0.2)], [(0, 0.3)]], k=60) == [(0, pytest.approx(1.0))]
+
+
+def test_rank_chunks_tfidf_mode_never_calls_vector(monkeypatch):
+    def fail(*_):
+        raise AssertionError("tfidf khong duoc goi vector")
+    monkeypatch.setattr(embedder, "search", fail)
+
+    hits, mode = searcher._rank_chunks(_StubIndex([(0, 0.5), (1, 0.01)]), "q", None, 0.05, "tfidf")
+
+    assert (hits, mode) == ([(0, 0.5)], "tfidf")
+
+
+def test_rank_chunks_vector_mode_applies_threshold_and_drops_unknown_chunks(monkeypatch):
+    monkeypatch.setattr(config, "VECTOR_MIN_SCORE", 0.5)
+    monkeypatch.setattr(embedder, "search", lambda *_: [("b", 0.9), ("khong-co", 0.8), ("a", 0.1)])
+
+    hits, mode = searcher._rank_chunks(_StubIndex([]), "q", None, 0.05, "vector")
+
+    assert (hits, mode) == ([(1, 0.9)], "vector")
+
+
+def test_rank_chunks_hybrid_tfidf_threshold_does_not_cut_fused_scores(monkeypatch):
+    monkeypatch.setattr(embedder, "search", lambda *_: [("b", 0.9)])
+
+    hits, mode = searcher._rank_chunks(_StubIndex([(0, 0.5)]), "q", None, 0.05, "hybrid")
+
+    assert mode == "hybrid"
+    assert {row for row, _ in hits} == {0, 1}
+
+
+def test_rank_chunks_hybrid_falls_back_to_tfidf_when_vector_fails(monkeypatch):
+    def fail(*_):
+        raise embedder.EmbedderNotReady("chua nap")
+    monkeypatch.setattr(embedder, "search", fail)
+
+    hits, mode = searcher._rank_chunks(_StubIndex([(0, 0.5)]), "q", None, 0.05, "hybrid")
+
+    assert (hits, mode) == ([(0, 0.5)], "tfidf")
+
+
+def test_rank_chunks_vector_mode_reports_failure(monkeypatch):
+    def fail(*_):
+        raise embedder.EmbedderNotReady("chua nap")
+    monkeypatch.setattr(embedder, "search", fail)
+
+    with pytest.raises(embedder.EmbedderNotReady):
+        searcher._rank_chunks(_StubIndex([]), "q", None, 0.05, "vector")
+
+
+class _FlakyPool:
+    def __init__(self, failures):
+        self.failures = failures
+        self.calls = 0
+
+    def connection(self):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise psycopg.OperationalError("mang dut")
+        return MagicMock()
+
+
+def test_write_batch_retries_transient_network_errors(monkeypatch):
+    flaky = _FlakyPool(failures=2)
+    monkeypatch.setattr(embedder, "pool", flaky)
+    monkeypatch.setattr(embedder, "WRITE_RETRY_SECONDS", 0)
+
+    embedder._write_batch([("[0.1]", "a")])
+
+    assert flaky.calls == 3
+
+
+def test_write_batch_gives_up_after_all_attempts(monkeypatch):
+    flaky = _FlakyPool(failures=99)
+    monkeypatch.setattr(embedder, "pool", flaky)
+    monkeypatch.setattr(embedder, "WRITE_RETRY_SECONDS", 0)
+
+    with pytest.raises(psycopg.OperationalError):
+        embedder._write_batch([("[0.1]", "a")])
+
+    assert flaky.calls == embedder.WRITE_ATTEMPTS
+
+
+def test_to_pgvector_format():
+    assert embedder.to_pgvector([0.5, -0.25]) == "[0.500000,-0.250000]"
+
+
+# ---------------------------------------------------------------- Boc tach PDF
+
+def test_clean_replaces_lookalike_u_horn():
+    assert _clean("ngƣời") == "người"
+    assert _clean("CHƢƠNG") == "CHƯƠNG"
+    # Dau rieng le sau ky tu sai van phai hop nhat thanh mot ky tu
+    assert _clean("nhƣ̃ng") == "những"
+
+
+@pytest.mark.parametrize("line", [
+    "Chương 2",
+    "CHƯƠNG 2",
+    "Chương 2: Tấn công ứng dụng web",
+    "Chương 2. Tấn công ứng dụng web",
+    "CHƯƠNG 2 TẤN CÔNG ỨNG DỤNG WEB",
+    "Chapter 3 - Indexing",
+    "Phần IV",
+])
+def test_chapter_heading_accepts_real_headings(line):
+    assert _is_chapter_heading(line)
+
+
+@pytest.mark.parametrize("line", [
+    "Chương 2 đề cập đến các dạng tấn công phổ biến lên ứng dụng web",
+    "Chương 5, mục 2 trình bày",
+    "Phần 1 cho thấy kết quả",
+    "Chapter 3 describes indexing",
+    "Phần mềm quản lý",
+])
+def test_chapter_heading_rejects_sentences(line):
+    assert not _is_chapter_heading(line)
 
 
 # ---------------------------------------------------------------- Tien xu ly

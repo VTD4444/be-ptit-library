@@ -16,6 +16,8 @@ import java.util.UUID;
 public class TfidfSearchResponse {
 
     private boolean booleanQuery;
+    // Che do worker thuc su da dung: TFIDF | VECTOR | HYBRID
+    private String searchMode;
     // Sap xep theo diem giam dan
     private List<Passage> passages;
     private int indexedChunks;
@@ -31,7 +33,7 @@ public class TfidfSearchResponse {
         private UUID documentId;
         private UUID digitalCopyId;
         private List<UUID> chunkIds;
-        // Do tuong dong cosine TF-IDF cao nhat trong cac chunk cua doan, trong [0, 1]
+        // Diem cao nhat trong cac chunk cua doan, trong [0, 1]: cosine (tfidf, vector) hoac RRF da chuan hoa (hybrid)
         private double score;
         private Integer wordStart;
         private Integer wordEnd;

@@ -20,6 +20,6 @@ public class ContentSearchRequest {
     @Builder.Default
     private int limit = 10;
 
-    @Builder.Default
-    private String searchType = "HYBRID"; // VECTOR, BM25, HYBRID
+    // Tuy chon: tfidf | vector | hybrid. Bo trong thi dung SEARCH_MODE cua worker
+    private String searchMode;
 }

@@ -37,6 +37,7 @@ class TfidfIndex:
         self.idf = idf
         self.matrix = matrix
         self.chunk_ids = chunk_ids
+        self.chunk_rows = {chunk_id: row for row, chunk_id in enumerate(chunk_ids)}
         self.chunk_copy = np.array(chunk_copy, dtype=np.int64)
         self.copies = copies  # [{"copyId", "documentId"}]
         self.inverted = inverted

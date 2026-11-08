@@ -3,6 +3,7 @@ package vn.edu.ptit.library.search.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import vn.edu.ptit.library.catalog.entity.PhysicalCopy;
 import vn.edu.ptit.library.catalog.repository.DocumentRepository;
@@ -33,7 +34,9 @@ import vn.edu.ptit.library.user.repository.UserRepository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -43,6 +46,7 @@ public class SearchServiceImpl implements SearchService {
 
     private static final String MODE_TFIDF = "TFIDF";
     private static final String MODE_KEYWORD_ONLY = "KEYWORD_ONLY";
+    private static final Set<String> WORKER_SEARCH_MODES = Set.of("tfidf", "vector", "hybrid");
     // Trich doan Python tra ve da duoc cat quanh vung khop; o day chi escape + boc <mark>
     private static final int SNIPPET_MAX_CHARS = 1000;
     private static final int FALLBACK_SNIPPET_CHARS = 300;
@@ -79,7 +83,7 @@ public class SearchServiceImpl implements SearchService {
     public List<ContentSearchResultDto> searchContent(ContentSearchRequest request) {
         String query = SearchTextUtils.normalize(request.getQuery());
         List<Passage> results = rank(query, SearchTextUtils.extractTerms(query), null, null, false,
-                request.getLimit(), MAX_LOCATIONS_PER_RESULT).passages();
+                request.getLimit(), MAX_LOCATIONS_PER_RESULT, request.getSearchMode()).passages();
 
         // Tinh maxScore de ghi nhan lich su va phat hien truy van khong ket qua (Muc 2.4 & 2.5)
         logSearch(request.getQuery(), results.isEmpty() ? 0.0 : results.get(0).score(), results.size());
@@ -113,7 +117,8 @@ public class SearchServiceImpl implements SearchService {
         DocumentFilter filter = new DocumentFilter(
                 blankToNull(request.getLanguage()), blankToNull(request.getDocType()), request.getDepartmentId());
 
-        Ranking ranking = rank(query, terms, null, filter, true, request.getLimit(), MAX_LOCATIONS_PER_RESULT);
+        Ranking ranking = rank(query, terms, null, filter, true, request.getLimit(), MAX_LOCATIONS_PER_RESULT,
+                request.getSearchMode());
         List<Passage> hits = ranking.passages();
         logSearch(query, hits.isEmpty() ? 0.0 : hits.get(0).score(), hits.size());
 
@@ -142,7 +147,7 @@ public class SearchServiceImpl implements SearchService {
     }
 
     @Override
-    public DocumentMatchesResponse findMatches(UUID documentId, String rawQuery, int limit) {
+    public DocumentMatchesResponse findMatches(UUID documentId, String rawQuery, int limit, String searchMode) {
         String query = SearchTextUtils.normalize(rawQuery);
         if (query.isEmpty()) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Nội dung tìm kiếm không được để trống");
@@ -152,7 +157,7 @@ public class SearchServiceImpl implements SearchService {
         }
         List<String> terms = SearchTextUtils.extractTerms(query);
         Ranking ranking = rank(query, terms, documentId, null, false,
-                Math.max(1, Math.min(limit, MAX_MATCHES_PER_DOCUMENT)), MAX_LOCATIONS_PER_MATCH);
+                Math.max(1, Math.min(limit, MAX_MATCHES_PER_DOCUMENT)), MAX_LOCATIONS_PER_MATCH, searchMode);
 
         return DocumentMatchesResponse.builder()
                 .documentId(documentId)
@@ -176,10 +181,11 @@ public class SearchServiceImpl implements SearchService {
     }
 
     /**
-     * Tim tren Python Worker (Boolean + TF-IDF + gop chunk + dinh vi); Worker loi thi du phong Full-Text Search.
+     * Tim tren Python Worker (Boolean + TF-IDF/vector/hybrid + gop chunk + dinh vi); Worker loi thi du phong Full-Text Search.
      */
     private Ranking rank(String query, List<String> terms, UUID documentId, DocumentFilter filter,
-                         boolean bestPerDocument, int limit, int maxLocations) {
+                         boolean bestPerDocument, int limit, int maxLocations, String rawSearchMode) {
+        String searchMode = normalizeSearchMode(rawSearchMode);
         Collection<UUID> allowedDocuments = null;
         if (documentId != null) {
             allowedDocuments = List.of(documentId);
@@ -190,22 +196,55 @@ public class SearchServiceImpl implements SearchService {
             }
         }
 
+        TfidfSearchResponse response;
         try {
-            TfidfSearchResponse response = pythonWorkerClient.searchTfidf(TfidfSearchRequest.builder()
+            response = pythonWorkerClient.searchTfidf(TfidfSearchRequest.builder()
                     .query(query)
                     .limit(limit)
                     .bestPerDocument(bestPerDocument)
                     .documentIds(allowedDocuments)
                     .minScore(minScore)
                     .maxLocations(maxLocations)
+                    .searchMode(searchMode)
                     .build());
-            List<TfidfSearchResponse.Passage> passages = response != null && response.getPassages() != null
-                    ? response.getPassages() : List.of();
-            return new Ranking(toPassages(passages), MODE_TFIDF, response != null && response.isBooleanQuery());
         } catch (Exception ex) {
             log.warn("Khong tim kiem duoc tren Python Worker, du phong Full-Text Search: {}", ex.getMessage());
+            return rankByFullText(terms, documentId, filter, bestPerDocument, limit);
         }
 
+        List<TfidfSearchResponse.Passage> passages = response != null && response.getPassages() != null
+                ? response.getPassages() : List.of();
+        String mode = response != null && response.getSearchMode() != null ? response.getSearchMode() : MODE_TFIDF;
+        return new Ranking(toPassagesWithRetry(passages), mode, response != null && response.isBooleanQuery());
+    }
+
+    private static String normalizeSearchMode(String raw) {
+        String mode = blankToNull(raw);
+        if (mode == null) {
+            return null;
+        }
+        mode = mode.toLowerCase(Locale.ROOT);
+        if (!WORKER_SEARCH_MODES.contains(mode)) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "searchMode chỉ nhận tfidf, vector hoặc hybrid");
+        }
+        return mode;
+    }
+
+    /**
+     * Worker da tra ket qua nen loi o day la loi DB, khong du phong sang Full-Text Search (se mat vi tri highlight).
+     * Ket noi hong da bi pool loai bo nen thu lai mot lan se lay ket noi moi.
+     */
+    private List<Passage> toPassagesWithRetry(List<TfidfSearchResponse.Passage> passages) {
+        try {
+            return toPassages(passages);
+        } catch (DataAccessException ex) {
+            log.warn("Loi DB khi doc thong tin tai lieu, thu lai mot lan: {}", ex.getMostSpecificCause().getMessage());
+            return toPassages(passages);
+        }
+    }
+
+    private Ranking rankByFullText(List<String> terms, UUID documentId, DocumentFilter filter,
+                                   boolean bestPerDocument, int limit) {
         String tsQuery = SearchTextUtils.toTsQuery(terms);
         if (tsQuery == null) {
             return new Ranking(List.of(), MODE_KEYWORD_ONLY, false);

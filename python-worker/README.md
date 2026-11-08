@@ -4,6 +4,8 @@ Service FastAPI chạy cạnh Spring Boot, cài đặt theo hai tài liệu:
 - **"XỬ LÝ VĂN BẢN"**: TF-IDF (unigram + bigram, sublinear TF, smooth IDF, chuẩn hoá L2, cắt tỉa từ điển) + cosine.
 - **Lecture 8 – Text indexing and Boolean query model**: tiền xử lý (có gom đồng nghĩa), inverted file, positional index, truy vấn Boolean AND/OR/NOT, cụm từ.
 
+Ngoài TF-IDF còn có tìm theo nghĩa bằng embedding (pgvector) và chế độ lai, xem mục [Chế độ tìm kiếm](#chế-độ-tìm-kiếm-tfidf--vector--hybrid).
+
 Kho chủ yếu tiếng Việt nên có điều chỉnh (xem dưới). Không có OCR.
 Spring gọi sang qua `app.python-worker.base-url` (mặc định `http://localhost:8000`).
 
@@ -13,6 +15,8 @@ Spring gọi sang qua `app.python-worker.base-url` (mặc định `http://localh
 | `POST /api/extract-index` | Upload PDF (`/api/admin/documents/{id}/digital-copies`) | Nhận job, trả 202, xử lý ngầm |
 | `POST /api/search` | `/api/search/smart`, `/api/search/document/{id}/matches` | Lọc Boolean → xếp hạng cosine → gộp chunk gối nhau → định vị |
 | `POST /api/index/rebuild` | Thủ công | Lập chỉ mục lại (sau khi xoá tài liệu, sửa từ điển đồng nghĩa...) |
+| `GET /api/embeddings/status` | Thủ công | Model đã nạp chưa, bao nhiêu chunk đã có embedding |
+| `POST /api/embeddings/backfill[?force=true]` | Thủ công | Sinh embedding cho chunk còn thiếu (trả 202, chạy ngầm); `force=true` sinh lại hết, dùng sau khi đổi model |
 
 ## Dữ liệu (`DATA_DIR`, mặc định `./data`)
 
@@ -53,6 +57,32 @@ vẽ highlight lên trang (chia tỷ lệ theo kích thước canvas).
   - Ví dụ: `"mạng nơ-ron" AND (ảnh OR video) NOT y tế`.
 - Phần phủ định (`NOT ...`) không dùng để xếp hạng hay highlight.
 
+## Chế độ tìm kiếm (tfidf / vector / hybrid)
+
+Bước xếp hạng chunk có 3 chế độ. Mỗi request chọn qua `searchMode`; bỏ trống thì dùng `SEARCH_MODE` trong `.env` (mặc định `tfidf`).
+
+| Chế độ | Cách xếp hạng | Điểm trả về |
+| --- | --- | --- |
+| `tfidf` | Cosine TF-IDF như trên | cosine TF-IDF, lọc theo `minScore` |
+| `vector` | Cosine giữa embedding truy vấn và embedding chunk (pgvector, toán tử `<=>`) | cosine embedding, lọc theo `VECTOR_MIN_SCORE` |
+| `hybrid` | Lấy `HYBRID_CANDIDATE_CHUNKS` chunk tốt nhất của mỗi luồng, gộp bằng **Reciprocal Rank Fusion**: `Σ 1/(RRF_K + hạng)` | điểm RRF chia cho điểm tối đa, nằm trong [0, 1] |
+
+- Truy vấn Boolean luôn dùng `tfidf` (vector không hiểu `NOT` và `"cụm từ"`).
+- `hybrid` vẫn trả kết quả TF-IDF khi model chưa nạp xong hoặc DB lỗi; `vector` thì báo lỗi. Response có `searchMode` là chế độ thực sự đã dùng.
+- Khớp theo nghĩa có thể không chứa từ nào của truy vấn: khi đó vị trí trả về là cả đoạn (để vẫn vẽ được trên trang) và không có `highlightTerms`.
+- Gộp chunk thành đoạn và định vị giống hệt chế độ `tfidf`.
+
+**Embedding**
+- Model mặc định `intfloat/multilingual-e5-base` (768 chiều, chạy CPU, có tiền tố `query: ` / `passage: ` của họ E5). Lần chạy đầu tải model mất vài phút; model được nạp ở luồng riêng nên TF-IDF vẫn dùng được ngay.
+- Embedding được sinh ở cuối luồng bóc tách (bước 7 dưới). Lỗi sinh embedding không làm hỏng job: tài liệu vẫn tìm được bằng TF-IDF và có ghi chú.
+- Chunk đã có từ trước khi bật embedding: gọi `POST /api/embeddings/backfill` một lần.
+- Đổi model khác số chiều: sửa `EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`, đổi kiểu cột `embedding vector(N)` rồi gọi `POST /api/embeddings/backfill?force=true`.
+
+**Hạn chế hiện tại**
+- **Chưa có index ANN (HNSW/IVFFlat) trên cột `embedding`**: tìm vector đang quét tuần tự toàn bảng. Kho lớn thì cần tạo, ví dụ:
+  `CREATE INDEX ON public.search_document_chunks USING hnsw (embedding vector_cosine_ops);`
+- `VECTOR_MIN_SCORE`, `HYBRID_CANDIDATE_CHUNKS`, `RRF_K` đang là giá trị tạm, chưa qua đánh giá trên dữ liệu thật.
+
 ## Ánh xạ với tài liệu
 
 | Nội dung | Cài đặt |
@@ -81,7 +111,8 @@ vẽ highlight lên trang (chia tỷ lệ theo kích thước canvas).
 4. Tách từ theo câu → positional index; chia chunk theo khoảng từ (không cắt ngang chương/mục); lưu `data/copies/...`.
 5. Lưu chunk vào `search_document_chunks` (kèm `fts_tokens` để Spring tìm dự phòng khi worker tắt).
 6. **Lập chỉ mục TF-IDF + inverted file lại trên toàn kho** (từ điển, IDF phụ thuộc mọi văn bản); token lấy từ positional index nên không phải tách từ lại.
-7. Bản số → INDEXED / LOW_QUALITY, job → COMPLETED. Lỗi bất kỳ → job FAILED + `error_message`.
+7. Sinh embedding cho các chunk mới (lỗi thì bỏ qua, chỉ ghi chú vào bản số).
+8. Bản số → INDEXED / LOW_QUALITY, job → COMPLETED. Lỗi bất kỳ → job FAILED + `error_message`.
 
 ## Chạy
 

@@ -28,4 +28,7 @@ public class TfidfSearchRequest {
 
     private double minScore;
     private int maxLocations;
+
+    // tfidf | vector | hybrid; null => dung SEARCH_MODE cua worker
+    private String searchMode;
 }

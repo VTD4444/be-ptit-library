@@ -6,15 +6,21 @@ Tim kiem noi dung:
      [start, end) chong len nhau cua cung ban so thanh MOT doan; diem doan = max diem chunk (OR co trong so).
   4. Dinh vi: dung positional index tim chinh xac cac tu/cum tu khop trong doan -> trang, doan, cau,
      vi tri tu va toa do de highlight.
+
+Che do xep hang (buoc 2): tfidf | vector (cosine embedding qua pgvector) | hybrid (gop hai luong bang RRF).
+Truy van Boolean luon dung tfidf vi vector khong hieu NOT va "cum tu".
 """
+import logging
 import re
 from dataclasses import dataclass, field
 
-from app import config, copy_store
+from app import config, copy_store, embedder
 from app.boolean_query import And, Not, Or, ParsedQuery, Phrase, Terms, parse
 from app.db import pool
 from app.synonyms import canonical_sequence, canonical_terms
 from app.tfidf_index import TfidfIndex
+
+log = logging.getLogger(__name__)
 
 LETTERS_RE = re.compile(r"[^\W\d_]+")
 
@@ -244,18 +250,64 @@ def _unify(index: TfidfIndex, hits: list[tuple[int, float]]) -> list[Passage]:
     return passages
 
 
+def reciprocal_rank_fusion(rankings: list[list[tuple[int, float]]], k: int) -> list[tuple[int, float]]:
+    """
+    RRF: diem chunk = tong 1 / (k + hang) tren cac luong. Chi dung thu hang nen khong can dua cosine TF-IDF va
+    cosine embedding ve cung thang. Chia cho diem toi da de ket qua nam trong [0, 1] nhu cac che do khac.
+    """
+    scores: dict[int, float] = {}
+    for ranking in rankings:
+        for rank, (row, _) in enumerate(ranking, start=1):
+            scores[row] = scores.get(row, 0.0) + 1 / (k + rank)
+    best_possible = len(rankings) / (k + 1)
+    return sorted(((row, score / best_possible) for row, score in scores.items()), key=lambda hit: -hit[1])
+
+
+def _vector_hits(index: TfidfIndex, text: str, allowed: set[int] | None) -> list[tuple[int, float]]:
+    copy_ids = [index.copies[i]["copyId"] for i in allowed] if allowed is not None else None
+    hits = embedder.search(text, config.HYBRID_CANDIDATE_CHUNKS, copy_ids)
+    # Chunk ngoai mo hinh dang dung (chua lap chi muc lai) thi khong gop va dinh vi duoc
+    return [(index.chunk_rows[chunk_id], score) for chunk_id, score in hits
+            if chunk_id in index.chunk_rows and score >= config.VECTOR_MIN_SCORE]
+
+
+def _rank_chunks(index: TfidfIndex, text: str, allowed: set[int] | None, min_score: float,
+                 mode: str) -> tuple[list[tuple[int, float]], str]:
+    """Tra ve (hang chunk, diem) giam dan va che do thuc su da dung."""
+    tfidf_hits: list[tuple[int, float]] = []
+    if mode != "vector":
+        tfidf_hits = [(row, score) for row, score in index.search_chunks(text, config.SEARCH_CANDIDATE_CHUNKS, allowed)
+                      if score >= min_score]
+    if mode == "tfidf":
+        return tfidf_hits, mode
+
+    try:
+        vector_hits = _vector_hits(index, text, allowed)
+    except Exception as ex:  # noqa: BLE001 - hybrid van tra duoc ket qua TF-IDF khi model hoac DB loi
+        if mode == "vector":
+            raise
+        log.warning("Khong tim duoc bang vector, chi dung TF-IDF: %s", ex)
+        return tfidf_hits, "tfidf"
+    if mode == "vector":
+        return vector_hits, mode
+    fused = reciprocal_rank_fusion([tfidf_hits[:config.HYBRID_CANDIDATE_CHUNKS], vector_hits], config.RRF_K)
+    return fused, mode
+
+
 def search(index: TfidfIndex, query: str, limit: int, best_per_document: bool,
-           document_ids: set[str] | None, min_score: float, max_locations: int) -> tuple[list[Passage], ParsedQuery]:
+           document_ids: set[str] | None, min_score: float, max_locations: int,
+           mode: str | None = None) -> tuple[list[Passage], ParsedQuery, str]:
+    mode = mode or config.SEARCH_MODE
     parsed = parse(query)
     allowed = index.copies_of_documents(document_ids) if document_ids is not None else None
     if parsed.tree is not None:
+        mode = "tfidf"
         universe = allowed if allowed is not None else set(range(len(index.copies)))
         allowed = _evaluate(parsed.tree, index, universe)
     if not parsed.ranking_text.strip() or (allowed is not None and not allowed):
-        return [], parsed
+        return [], parsed, mode
 
-    hits = [(row, score) for row, score in index.search_chunks(parsed.ranking_text, config.SEARCH_CANDIDATE_CHUNKS, allowed)
-            if score >= min_score]
+    hits, mode = _rank_chunks(index, parsed.ranking_text, allowed, min_score, mode)
     passages = sorted(_unify(index, hits), key=lambda p: p.score, reverse=True)
 
     results: list[Passage] = []
@@ -267,14 +319,17 @@ def search(index: TfidfIndex, query: str, limit: int, best_per_document: bool,
         if passage.word_start is not None:
             data = copy_store.load(passage.digital_copy_id)
             spans = _find_spans(data, passage.word_start, passage.word_end, parsed.highlight)
-            passage.locations = _locations(data, spans, max_locations)
+            term_locations = _locations(data, spans, max_locations)
+            # Khop theo nghia co the khong chua tu nao cua truy van: tra ve vi tri ca doan de van to duoc tren trang
+            passage.locations = term_locations or (
+                _locations(data, [(passage.word_start, passage.word_end - 1)], max_locations) if mode != "tfidf" else [])
             if passage.locations:
                 # Chuong/muc theo vi tri khop dau tien (doan co the bat dau ngay truoc tieu de muc)
                 passage.chapter, passage.section = data.heading_at(passage.locations[0].word_start)
-            passage.snippet = _snippet(data, passage.word_start, passage.word_end, passage.locations)
-            passage.highlight_terms = sorted({s.lower() for loc in passage.locations
+            passage.snippet = _snippet(data, passage.word_start, passage.word_end, term_locations)
+            passage.highlight_terms = sorted({s.lower() for loc in term_locations
                                               for s in LETTERS_RE.findall(loc.text)})
         results.append(passage)
         if len(results) >= limit:
             break
-    return results, parsed
+    return results, parsed, mode
