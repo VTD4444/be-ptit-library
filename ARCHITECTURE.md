@@ -75,10 +75,12 @@ src/main/java/vn/edu/ptit/library/
 - Hai bảng `@MapsId` 1-1 (`user_profiles`, `document_embeddings`): `implements Persistable<UUID>` để tránh Hibernate gọi lệnh `merge()` sinh thêm câu `SELECT` thừa khi tạo mới.
 - Bốn bảng khóa phức hợp (`DocumentAuthor`, `DocumentDepartment`, `DocumentSimilarity`, `RecommendationCache`): luôn khởi tạo sẵn `new *Id()` tại trường `@EmbeddedId` để tránh lỗi `NullPointerException` lúc Hibernate copy ID.
 
-### D. Tìm kiếm nội dung (TF-IDF) và tsvector
+### D. Tìm kiếm nội dung (TF-IDF / vector / hybrid) và tsvector
 - Tìm kiếm nội dung dùng **TF-IDF + độ tương đồng cosine** (tài liệu "XỬ LÝ VĂN BẢN") kết hợp **lọc Boolean trên inverted file + positional index** (Lecture 8). Mô hình và dữ liệu vị trí nằm ở Python Worker (`python-worker/data/`, không đổi schema DB); Spring gọi `POST /api/search` nhận các **đoạn đã thống nhất** (chunk gối nhau được gộp) kèm vị trí trang/đoạn/câu/toạ độ, rồi lấy thông tin tài liệu từ DB (`ContentSearchRepository`). Chi tiết: `python-worker/README.md`.
 - Bộ lọc ngôn ngữ / dạng tài liệu / ngành học được Spring tính ra danh sách `documentIds` và gửi kèm để Worker chỉ chấm điểm trong phạm vi đó.
-- Cột `fts_tokens tsvector` vẫn được ghi để **dự phòng Full-Text Search** khi Worker không chạy; cột `embedding vector` hiện không dùng. Cả hai **không khai báo trong JPA Entity** để tránh lỗi ép kiểu `PGobject`, truy vấn bằng SQL native.
+- Có 3 chế độ xếp hạng: `tfidf` (cosine TF-IDF), `vector` (cosine embedding qua pgvector) và `hybrid` (gộp hai luồng bằng Reciprocal Rank Fusion). Mỗi request chọn được qua tham số `searchMode`; bỏ trống thì Worker dùng `SEARCH_MODE` của nó (mặc định `tfidf`). Truy vấn Boolean luôn chạy `tfidf`; nếu luồng vector lỗi thì `hybrid` chỉ dùng TF-IDF. Response trả về `searchMode` thực sự đã dùng.
+- Cột `fts_tokens tsvector` vẫn được ghi để **dự phòng Full-Text Search** khi Worker không chạy. Cột `embedding vector(768)` do Worker ghi (model `intfloat/multilingual-e5-base`) và đọc khi tìm `vector`/`hybrid`. Cả hai **không khai báo trong JPA Entity** để tránh lỗi ép kiểu `PGobject`, truy vấn bằng SQL native.
+- **Chưa có index ANN (HNSW/IVFFlat) trên cột `embedding`**, nên tìm vector đang quét tuần tự toàn bảng `search_document_chunks`. Với dữ liệu nhỏ thì chấp nhận được; khi kho lớn cần tạo index, ví dụ `CREATE INDEX ON public.search_document_chunks USING hnsw (embedding vector_cosine_ops);` (cột phải có số chiều cố định `vector(768)`).
 
 ---
 

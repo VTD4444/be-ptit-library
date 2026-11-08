@@ -8,3 +8,7 @@ simplemma==1.1.2
 pyvi==0.1.1
 psycopg[binary,pool]==3.2.3
 python-dotenv==1.0.1
+# Embedding: chay tren CPU nen lay ban PyTorch khong kem CUDA
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.15.0+cpu
+sentence-transformers==6.2.0

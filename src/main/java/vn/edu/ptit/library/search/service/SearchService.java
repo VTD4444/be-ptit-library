@@ -15,5 +15,5 @@ public interface SearchService {
 
     SmartSearchResponse smartSearch(SmartSearchRequest request);
 
-    DocumentMatchesResponse findMatches(UUID documentId, String query, int limit);
+    DocumentMatchesResponse findMatches(UUID documentId, String query, int limit, String searchMode);
 }

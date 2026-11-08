@@ -246,7 +246,7 @@ CREATE TABLE IF NOT EXISTS public.search_document_chunks (
     printed_page_label VARCHAR,
     chunk_text TEXT,
     token_count INTEGER,
-    embedding vector,
+    embedding vector(768),
     fts_tokens tsvector,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

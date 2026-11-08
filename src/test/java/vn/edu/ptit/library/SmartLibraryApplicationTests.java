@@ -67,6 +67,6 @@ class SmartLibraryApplicationTests {
                 .query("hoc may va xu ly ngon ngu tu nhien")
                 .build();
         Assertions.assertEquals(10, req.getLimit());
-        Assertions.assertEquals("HYBRID", req.getSearchType());
+        Assertions.assertNull(req.getSearchMode());
     }
 }

@@ -47,7 +47,8 @@ public class SearchController {
     public ApiResponse<DocumentMatchesResponse> getDocumentMatches(
             @PathVariable("id") UUID documentId,
             @RequestParam("query") String query,
-            @RequestParam(value = "limit", defaultValue = "5") int limit) {
-        return ApiResponse.success(searchService.findMatches(documentId, query, limit));
+            @RequestParam(value = "limit", defaultValue = "5") int limit,
+            @RequestParam(value = "searchMode", required = false) String searchMode) {
+        return ApiResponse.success(searchService.findMatches(documentId, query, limit, searchMode));
     }
 }

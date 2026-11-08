@@ -1,13 +1,15 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from threading import Thread
+from typing import Literal
 from uuid import UUID
 
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from app import indexer, searcher
+from app import embedder, indexer, searcher
 from app.db import pool
 from app.tfidf_index import holder
 
@@ -25,6 +27,8 @@ async def lifespan(_: FastAPI):
         holder.load_or_build(indexer.active_search_config_id())
     except Exception:  # noqa: BLE001
         log.exception("Khong nap/lap duoc mo hinh TF-IDF luc khoi dong")
+    # Nap model o luong rieng: lan dau phai tai ve mat vai phut, khong duoc chan TF-IDF
+    Thread(target=embedder.preload, name="embedding-loader", daemon=True).start()
     yield
     index_executor.shutdown(wait=False, cancel_futures=True)
     pool.close()
@@ -56,6 +60,8 @@ class SearchRequest(CamelModel):
     document_ids: list[UUID] | None = None
     min_score: float = Field(default=0.0, ge=0.0, le=1.0)
     max_locations: int = Field(default=20, ge=0, le=200)
+    # Bo trong thi dung SEARCH_MODE cua worker
+    search_mode: Literal["tfidf", "vector", "hybrid"] | None = None
 
 
 class LocationDto(CamelModel):
@@ -89,6 +95,8 @@ class PassageDto(CamelModel):
 
 class SearchResponse(CamelModel):
     boolean_query: bool
+    # Che do thuc su da dung: co the khac yeu cau (Boolean, hoac vector loi thi hybrid chi con TF-IDF)
+    search_mode: str
     passages: list[PassageDto]
     indexed_chunks: int
 
@@ -114,7 +122,7 @@ def extract_index(req: PdfIndexRequest):
 @app.post("/api/search", response_model_by_alias=True)
 def search(req: SearchRequest) -> SearchResponse:
     index = holder.current
-    passages, parsed = searcher.search(
+    passages, parsed, mode = searcher.search(
         index,
         req.query,
         limit=req.limit,
@@ -122,9 +130,11 @@ def search(req: SearchRequest) -> SearchResponse:
         document_ids={str(d) for d in req.document_ids} if req.document_ids is not None else None,
         min_score=req.min_score,
         max_locations=req.max_locations,
+        mode=req.search_mode,
     )
     return SearchResponse(
         boolean_query=parsed.tree is not None,
+        search_mode=mode.upper(),
         passages=[PassageDto.model_validate(p) for p in passages],
         indexed_chunks=index.size,
     )
@@ -141,3 +151,21 @@ def rebuild_index():
 
     index_executor.submit(run)
     return {"accepted": True}
+
+
+@app.get("/api/embeddings/status")
+def embeddings_status():
+    return embedder.status()
+
+
+@app.post("/api/embeddings/backfill", status_code=202)
+def backfill_embeddings(force: bool = False):
+    """Sinh embedding cho chunk da co ma khong phai upload lai PDF. force=true: sinh lai het (sau khi doi model)."""
+    def run():
+        try:
+            embedder.embed_pending(force=force)
+        except Exception:  # noqa: BLE001
+            log.exception("Sinh embedding that bai")
+
+    index_executor.submit(run)
+    return {"accepted": True, "force": force}

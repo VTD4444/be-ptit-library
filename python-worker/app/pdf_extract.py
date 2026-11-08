@@ -18,6 +18,10 @@ BOILERPLATE_PAGE_RATIO = 0.5
 BOILERPLATE_MIN_PAGES = 3
 
 CHAPTER_RE = re.compile(r"^(chương|chuong|chapter|phần|phan|part)\s+([0-9]+|[ivxlcdm]+)\b", re.IGNORECASE)
+# Sau "Chuong 2" chi co the la het dong, dau phan cach hoac ten chuong viet hoa; "Chuong 2 de cap..." la cau van
+CHAPTER_SEPARATORS = ":.-–—"
+# Font tieng Viet cu ghi "ư/Ư" thanh U+01A3/U+01A2 ("ƣ/Ƣ", khong co trong tieng Viet) nen phai doi ve ky tu dung
+LOOKALIKE_CHARS = str.maketrans({"ƣ": "ư", "Ƣ": "Ư"})
 # "1.2 Gioi thieu", "2.3.1. Mo hinh" - bat buoc chu cai hoa sau so de tranh nham voi so lieu trong cau
 SECTION_RE = re.compile(r"^\d+(\.\d+){1,3}\.?\s+[A-ZÀ-Ỹ]")
 PAGE_NUMBER_RE = re.compile(r"^\s*(trang\s*|page\s*)?\d{1,4}\s*$", re.IGNORECASE)
@@ -64,7 +68,17 @@ class _Line:
     words: list[tuple[str, tuple[float, float, float, float]]]
 
 
+def _is_chapter_heading(text: str) -> bool:
+    match = CHAPTER_RE.match(text)
+    if not match:
+        return False
+    rest = text[match.end():].lstrip()
+    return not rest or rest[0] in CHAPTER_SEPARATORS or rest[0].isupper()
+
+
 def _clean(text: str) -> str:
+    # Doi truoc khi chuan hoa de dau rieng le dat sau "ƣ" van hop nhat duoc thanh "ừ", "ứ"...
+    text = text.translate(LOOKALIKE_CHARS)
     # NFKC: hop nhat dau tieng Viet nhu NFC, dong thoi tach ligature cua LaTeX ("ﬁ" -> "fi")
     text = unicodedata.normalize("NFKC", text)
     # Bo ky tu vung rieng (Private Use) - thuong la glyph bullet cua font Wingdings/Symbol dinh vao tu
@@ -216,7 +230,7 @@ def extract(path: str) -> ExtractionResult:
                         is_heading = True
                         break
             elif len(line.text) <= MAX_HEADING_LEN:
-                if CHAPTER_RE.match(line.text):
+                if _is_chapter_heading(line.text):
                     title = line.text
                     # "CHUONG 1" thuong co ten chuong o dong ke tiep
                     if (len(line.text.split()) <= 3 and i + 1 < len(page_lines)

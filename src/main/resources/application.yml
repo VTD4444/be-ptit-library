@@ -15,6 +15,8 @@ spring:
       idle-timeout: 300000
       connection-timeout: 20000
       max-lifetime: 1200000
+      # Giu ket noi nhan roi hoat dong de pooler/mang khong am tham cat
+      keepalive-time: 60000
 
   jpa:
     open-in-view: false

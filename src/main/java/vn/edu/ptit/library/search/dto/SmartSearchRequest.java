@@ -27,6 +27,9 @@ public class SmartSearchRequest {
     private String docType;
     private Long departmentId;
 
+    // Tuy chon: tfidf | vector | hybrid. Bo trong thi dung SEARCH_MODE cua worker
+    private String searchMode;
+
     @Builder.Default
     @Min(value = 1, message = "limit toi thieu la 1")
     @Max(value = 50, message = "limit toi da la 50")
