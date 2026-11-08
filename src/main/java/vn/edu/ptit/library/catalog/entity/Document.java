@@ -55,6 +55,15 @@ public class Document extends SoftDeletableEntity {
     @Column(name = "classification_number")
     private String classificationNumber;
 
+    @Column(name = "cover_url")
+    private String coverUrl;
+
+    @Column(name = "origin")
+    private String origin;
+
+    @Column(name = "physical_description")
+    private String physicalDescription;
+
     @Column(name = "abstract")
     private String abstractText;
 

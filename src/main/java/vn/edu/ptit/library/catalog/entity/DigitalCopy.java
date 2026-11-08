@@ -46,6 +46,9 @@ public class DigitalCopy extends BaseAuditableEntity {
     @Column(name = "processing_status")
     private String processingStatus;
 
+    @Column(name = "file_name")
+    private String fileName;
+
     @Column(name = "file_path")
     private String filePath;
 

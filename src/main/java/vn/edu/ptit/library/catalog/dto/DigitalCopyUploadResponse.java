@@ -18,6 +18,7 @@ public class DigitalCopyUploadResponse {
     private UUID digitalCopyId;
     private UUID documentId;
     private String version;
+    private String fileName;
     private Long fileSize;
 
     // Trang thai luu tep: STORED khi tep da ghi xuong storage thanh cong
