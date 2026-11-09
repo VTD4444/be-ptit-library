@@ -36,28 +36,30 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt)) {
                 Claims claims = tokenProvider.getClaims(jwt);
-                UUID userId = UUID.fromString(claims.getSubject());
-                String email = claims.get("email", String.class);
-                String userCode = claims.get("userCode", String.class);
-                String role = claims.get("role", String.class);
+                if (!"REFRESH".equals(claims.get("type"))) {
+                    UUID userId = UUID.fromString(claims.getSubject());
+                    String email = claims.get("email", String.class);
+                    String userCode = claims.get("userCode", String.class);
+                    String role = claims.get("role", String.class);
 
-                CustomUserDetails userDetails = CustomUserDetails.builder()
-                        .id(userId)
-                        .email(email)
-                        .userCode(userCode)
-                        .role(role)
-                        .status("ACTIVE")
-                        .build();
+                    CustomUserDetails userDetails = CustomUserDetails.builder()
+                            .id(userId)
+                            .email(email)
+                            .userCode(userCode)
+                            .role(role)
+                            .status("ACTIVE")
+                            .build();
 
-                String auth = (role != null && role.startsWith("ROLE_")) ? role : "ROLE_" + role;
-                UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        Collections.singletonList(new SimpleGrantedAuthority(auth))
-                );
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    String auth = (role != null && role.startsWith("ROLE_")) ? role : "ROLE_" + role;
+                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            Collections.singletonList(new SimpleGrantedAuthority(auth))
+                    );
+                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
             }
         } catch (Exception ex) {
             log.error("Could not set user authentication in security context", ex);

@@ -18,6 +18,10 @@ import vn.edu.ptit.library.search.service.SearchConfigurationService;
 import vn.edu.ptit.library.security.*;
 import vn.edu.ptit.library.common.exception.*;
 import java.util.List;
+import java.util.UUID;
+import vn.edu.ptit.library.catalog.controller.AdminCatalogController;
+import vn.edu.ptit.library.catalog.service.AuthorService;
+import vn.edu.ptit.library.catalog.service.PhysicalCopyService;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -25,7 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest({PolicyAdminController.class, PenaltyTypeAdminController.class, SearchConfigAdminController.class,
-        vn.edu.ptit.library.catalog.controller.DocumentController.class,
+        vn.edu.ptit.library.catalog.controller.DocumentController.class, AdminCatalogController.class,
         vn.edu.ptit.library.user.controller.AuthController.class, CirculationController.class})
 @Import({SecurityConfig.class, JwtAuthenticationFilter.class, JwtAuthenticationEntryPoint.class})
 class ConfigurationApiTest {
@@ -33,6 +37,19 @@ class ConfigurationApiTest {
     @MockBean CirculationConfigurationService circulation;
     @MockBean SearchConfigurationService search;
     @MockBean JwtTokenProvider tokens;
+    @MockBean AuthorService authors;
+    @MockBean PhysicalCopyService copies;
+
+    @Test
+    void onlyAdminCanDeleteDocument() throws Exception {
+        UUID id = UUID.randomUUID();
+        String path = "/api/catalog-admin/documents/" + id;
+        mvc.perform(delete(path)).andExpect(status().isUnauthorized());
+        mvc.perform(delete(path).with(user("staff").roles("LIBRARIAN"))).andExpect(status().isForbidden());
+        verify(catalog, never()).deleteDocument(any());
+        mvc.perform(delete(path).with(user("admin").roles("ADMIN"))).andExpect(status().isOk());
+        verify(catalog).deleteDocument(id);
+    }
     @MockBean vn.edu.ptit.library.catalog.service.CatalogService catalog;
     @MockBean vn.edu.ptit.library.user.service.AuthService auth;
     @MockBean vn.edu.ptit.library.circulation.service.CirculationService loans;

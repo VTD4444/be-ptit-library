@@ -55,6 +55,7 @@ public class AdminCatalogController {
     }
 
     @DeleteMapping("/documents/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Xoa mem bieu ghi thu muc")
     public ApiResponse<Void> deleteDocument(@PathVariable("id") UUID id) {
         catalogService.deleteDocument(id);
