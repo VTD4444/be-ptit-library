@@ -11,20 +11,30 @@ import vn.edu.ptit.library.catalog.entity.PhysicalCopy;
 import vn.edu.ptit.library.catalog.repository.PhysicalCopyRepository;
 import vn.edu.ptit.library.catalog.service.CatalogService;
 import vn.edu.ptit.library.catalog.service.PhysicalCopyService;
+import vn.edu.ptit.library.circulation.repository.CirculationRepository;
+import vn.edu.ptit.library.circulation.repository.HoldQueueRepository;
+import vn.edu.ptit.library.common.enums.HoldStatus;
 import vn.edu.ptit.library.common.enums.PhysicalCopyStatus;
 import vn.edu.ptit.library.common.exception.AppException;
 import vn.edu.ptit.library.common.exception.ErrorCode;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class PhysicalCopyServiceImpl implements PhysicalCopyService {
 
+    // Trang thai do nghiep vu luu thong (muon/giu cho) quan ly, khong cho dat tay qua API bien muc
+    private static final Set<String> CIRCULATION_STATUSES = Set.of(
+            PhysicalCopyStatus.BORROWED.name(), PhysicalCopyStatus.RESERVED.name());
+
     private final PhysicalCopyRepository physicalCopyRepository;
     private final CatalogService catalogService;
+    private final CirculationRepository circulationRepository;
+    private final HoldQueueRepository holdQueueRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -44,6 +54,10 @@ public class PhysicalCopyServiceImpl implements PhysicalCopyService {
         checkDuplicateBarcode(request.getBarcode(), null);
 
         String status = parseStatus(request.getStatus());
+        if (status != null && CIRCULATION_STATUSES.contains(status)) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Bản mới không thể ở trạng thái đang mượn hoặc đang giữ");
+        }
 
         PhysicalCopy copy = PhysicalCopy.builder()
                 .document(document)
@@ -73,11 +87,33 @@ public class PhysicalCopyServiceImpl implements PhysicalCopyService {
         copy.setCondition(request.getCondition());
 
         String status = parseStatus(request.getStatus());
-        if (status != null) {
+        if (status != null && !status.equals(copy.getStatus())) {
+            if (CIRCULATION_STATUSES.contains(status) || CIRCULATION_STATUSES.contains(copy.getStatus())) {
+                throw new AppException(ErrorCode.INVALID_REQUEST,
+                        "Trạng thái đang mượn/đang giữ chỉ thay đổi qua nghiệp vụ mượn trả");
+            }
             copy.setStatus(status);
         }
 
         return toDto(physicalCopyRepository.save(copy));
+    }
+
+    @Override
+    @Transactional
+    public void deleteCopy(UUID id) {
+        PhysicalCopy copy = physicalCopyRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.PHYSICAL_COPY_NOT_FOUND));
+
+        boolean onLoan = CIRCULATION_STATUSES.contains(copy.getStatus())
+                || circulationRepository.findByPhysicalCopyIdAndReturnDateIsNull(id).isPresent()
+                || holdQueueRepository.findByPhysicalCopyIdAndStatus(id, HoldStatus.READY_FOR_PICKUP.name()).isPresent();
+        if (onLoan) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Bản " + copy.getBarcode() + " đang được mượn hoặc giữ cho bạn đọc, không thể xóa");
+        }
+
+        copy.markDeleted();
+        physicalCopyRepository.save(copy);
     }
 
     private void checkDuplicateBarcode(String barcode, UUID currentCopyId) {

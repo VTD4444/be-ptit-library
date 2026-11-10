@@ -82,6 +82,13 @@ public class AdminCatalogController {
         return ApiResponse.success("Cap nhat ban sach giay thanh cong", physicalCopyService.updateCopy(id, request));
     }
 
+    @DeleteMapping("/physical-copies/{id}")
+    @Operation(summary = "Xoa mem ban sach giay (chi khi khong dang duoc muon hoac giu cho ban doc)")
+    public ApiResponse<Void> deletePhysicalCopy(@PathVariable("id") UUID id) {
+        physicalCopyService.deleteCopy(id);
+        return ApiResponse.success("Xoa ban sach giay thanh cong", null);
+    }
+
     @PostMapping("/authors")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Them tac gia")
