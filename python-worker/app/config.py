@@ -3,9 +3,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 load_dotenv()
 
-DATABASE_URL = os.environ["DATABASE_URL"]
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://unused")
 
 _upload_root = os.getenv("UPLOAD_ROOT")
 UPLOAD_ROOT = Path(_upload_root).resolve() if _upload_root else None

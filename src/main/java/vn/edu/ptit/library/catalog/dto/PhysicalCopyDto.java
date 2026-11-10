@@ -22,6 +22,7 @@ public class PhysicalCopyDto {
     private String callNumber;
     private String shelfLocation;
     private String status;
+    private String condition;
     private OffsetDateTime accessionDate;
     private OffsetDateTime lastInventoryDate;
 }

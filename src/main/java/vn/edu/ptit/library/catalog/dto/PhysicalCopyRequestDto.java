@@ -26,4 +26,5 @@ public class PhysicalCopyRequestDto {
     private String callNumber;
     private String shelfLocation;
     private String status;
+    private String condition;
 }

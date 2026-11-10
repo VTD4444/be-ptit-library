@@ -37,3 +37,4 @@ build/
 *.log
 uploads/
 .agents/
+.venv/

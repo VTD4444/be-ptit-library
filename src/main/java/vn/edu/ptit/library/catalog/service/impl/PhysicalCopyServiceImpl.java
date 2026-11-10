@@ -51,6 +51,7 @@ public class PhysicalCopyServiceImpl implements PhysicalCopyService {
                 .callNumber(request.getCallNumber())
                 .shelfLocation(request.getShelfLocation())
                 .status(status != null ? status : PhysicalCopyStatus.AVAILABLE.name())
+                .condition(request.getCondition())
                 .accessionDate(OffsetDateTime.now())
                 .build();
 
@@ -69,6 +70,7 @@ public class PhysicalCopyServiceImpl implements PhysicalCopyService {
         copy.setBarcode(request.getBarcode().trim());
         copy.setCallNumber(request.getCallNumber());
         copy.setShelfLocation(request.getShelfLocation());
+        copy.setCondition(request.getCondition());
 
         String status = parseStatus(request.getStatus());
         if (status != null) {
@@ -106,6 +108,7 @@ public class PhysicalCopyServiceImpl implements PhysicalCopyService {
                 .callNumber(copy.getCallNumber())
                 .shelfLocation(copy.getShelfLocation())
                 .status(copy.getStatus())
+                .condition(copy.getCondition())
                 .accessionDate(copy.getAccessionDate())
                 .lastInventoryDate(copy.getLastInventoryDate())
                 .build();

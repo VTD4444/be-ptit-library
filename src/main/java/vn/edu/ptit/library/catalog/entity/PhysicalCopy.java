@@ -51,6 +51,9 @@ public class PhysicalCopy extends SoftDeletableEntity {
     @Column(name = "status")
     private String status;
 
+    @Column(name = "condition")
+    private String condition;
+
     @Column(name = "accession_date")
     private OffsetDateTime accessionDate;
 

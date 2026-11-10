@@ -34,5 +34,7 @@ public class DocumentRequestDto {
     private String classificationNumber;
     private String language;
     private String coverUrl;
+    private String origin;
+    private String physicalDescription;
     private List<Long> departmentIds;
 }

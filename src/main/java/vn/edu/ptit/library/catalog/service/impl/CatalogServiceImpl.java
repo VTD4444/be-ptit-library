@@ -80,6 +80,8 @@ public class CatalogServiceImpl implements CatalogService {
                 .classificationNumber(doc.getClassificationNumber())
                 .abstractText(doc.getAbstractText())
                 .coverUrl(getCoverUrl(doc))
+                .origin(doc.getOrigin())
+                .physicalDescription(doc.getPhysicalDescription())
                 .metadata(doc.getMetadata())
                 .departmentIds(departments.stream().map(d -> d.getDepartment().getId()).toList())
                 .departmentNames(departments.stream().map(d -> d.getDepartment().getName()).toList())
@@ -87,6 +89,7 @@ public class CatalogServiceImpl implements CatalogService {
                 .availablePhysicalCopies(physicalCopyRepository.countByDocumentIdAndStatus(id, AVAILABLE))
                 .hasDigitalCopy(digital.isPresent())
                 .digitalCopyId(digital.map(DigitalCopy::getId).orElse(null))
+                .digitalFileName(digital.map(DigitalCopy::getFileName).orElse(null))
                 .digitalProcessingStatus(digital.map(DigitalCopy::getProcessingStatus).orElse(null))
                 .pageCount(digital.map(DigitalCopy::getPageCount).orElse(null))
                 .averageRating(reviewRepository.getAverageRatingForDocument(id))
@@ -160,6 +163,9 @@ public class CatalogServiceImpl implements CatalogService {
         doc.setDocType(request.getDocType());
         doc.setClassificationNumber(request.getClassificationNumber());
         doc.setLanguage(request.getLanguage());
+        doc.setCoverUrl(trimToNull(request.getCoverUrl()));
+        doc.setOrigin(trimToNull(request.getOrigin()));
+        doc.setPhysicalDescription(trimToNull(request.getPhysicalDescription()));
 
         Map<String, Object> metadata = doc.getMetadata() != null
                 ? new HashMap<>(doc.getMetadata())
@@ -259,6 +265,9 @@ public class CatalogServiceImpl implements CatalogService {
     }
 
     private String getCoverUrl(Document doc) {
+        if (StringUtils.hasText(doc.getCoverUrl())) {
+            return doc.getCoverUrl();
+        }
         if (doc.getMetadata() == null) {
             return null;
         }

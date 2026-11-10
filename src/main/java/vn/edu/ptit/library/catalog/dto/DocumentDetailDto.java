@@ -29,6 +29,8 @@ public class DocumentDetailDto {
     private String classificationNumber;
     private String abstractText;
     private String coverUrl;
+    private String origin;
+    private String physicalDescription;
     private Map<String, Object> metadata;
 
     private List<Long> departmentIds;
@@ -39,6 +41,7 @@ public class DocumentDetailDto {
 
     private boolean hasDigitalCopy;
     private UUID digitalCopyId;
+    private String digitalFileName;
     private String digitalProcessingStatus;
     private Integer pageCount;
 
