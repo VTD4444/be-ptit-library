@@ -82,7 +82,8 @@ public class SearchServiceImpl implements SearchService {
     @Override
     public List<ContentSearchResultDto> searchContent(ContentSearchRequest request) {
         String query = SearchTextUtils.normalize(request.getQuery());
-        List<Passage> results = rank(query, SearchTextUtils.extractTerms(query), null, null, false,
+        // bestPerDocument = true: moi tai lieu chi lay doan khop nhat, tranh nhieu the cung mot tai lieu
+        List<Passage> results = rank(query, SearchTextUtils.extractTerms(query), null, null, true,
                 request.getLimit(), MAX_LOCATIONS_PER_RESULT, request.getSearchMode()).passages();
 
         // Tinh maxScore de ghi nhan lich su va phat hien truy van khong ket qua (Muc 2.4 & 2.5)
