@@ -5,3 +5,7 @@ __pycache__/
 .pytest_cache/
 data/
 .ipynb_checkpoints/
+# Du lieu tam cua batch (sinh ra khi chay, khong commit)
+*.zip
+documents.csv
+mapping*.csv
