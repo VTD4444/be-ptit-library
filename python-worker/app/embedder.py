@@ -1,5 +1,5 @@
 """
-Sinh embedding cho chunk va tim chunk gan nghia bang pgvector.
+Sinh embedding cho chunk (luu cot embedding tren DB) va tim chunk gan nghia trong kho vector o RAM (app.vector_store).
 Model chi nap mot lan; thu vien nang duoc import khi can de chay TF-IDF khong phu thuoc PyTorch.
 """
 import logging
@@ -10,7 +10,7 @@ from uuid import UUID
 import numpy as np
 import psycopg
 
-from app import config
+from app import config, vector_store
 from app.db import pool
 
 log = logging.getLogger(__name__)
@@ -89,7 +89,7 @@ def embed_pending(digital_copy_id: UUID | None = None, force: bool = False) -> i
         conditions.append("c.embedding IS NULL")
     with pool.connection() as conn:
         rows = conn.execute(
-            f"""SELECT c.id, c.chunk_text
+            f"""SELECT c.id, c.chunk_text, c.digital_copy_id
                 FROM public.search_document_chunks c
                 JOIN public.digital_copies dc ON dc.id = c.digital_copy_id AND dc.is_current = true
                 WHERE {' AND '.join(conditions)}
@@ -102,18 +102,24 @@ def embed_pending(digital_copy_id: UUID | None = None, force: bool = False) -> i
     model = load_model()
     written = 0
     encode_seconds = write_seconds = 0.0
-    # Ghi tung lo voi ket noi rieng: khong giu ket noi khi dang tinh, va ket noi dut chi mat mot lo
-    for batch_no, start in enumerate(range(0, len(rows), config.EMBEDDING_BATCH_SIZE), start=1):
-        batch = rows[start:start + config.EMBEDDING_BATCH_SIZE]
-        started = time.perf_counter()
-        vectors = _encode(model, [text for _, text in batch], config.EMBEDDING_PASSAGE_PREFIX)
-        encoded = time.perf_counter()
-        _write_batch([(to_pgvector(vector), chunk_id) for (chunk_id, _), vector in zip(batch, vectors)])
-        encode_seconds += encoded - started
-        write_seconds += time.perf_counter() - encoded
-        written += len(batch)
-        if batch_no % PROGRESS_LOG_BATCHES == 0:
-            log.info("Embedding %d/%d chunk (tinh %.0fs, ghi DB %.0fs)", written, len(rows), encode_seconds, write_seconds)
+    saved: list[tuple[str, str, np.ndarray]] = []
+    try:
+        # Ghi tung lo voi ket noi rieng: khong giu ket noi khi dang tinh, va ket noi dut chi mat mot lo
+        for batch_no, start in enumerate(range(0, len(rows), config.EMBEDDING_BATCH_SIZE), start=1):
+            batch = rows[start:start + config.EMBEDDING_BATCH_SIZE]
+            started = time.perf_counter()
+            vectors = _encode(model, [text for _, text, _ in batch], config.EMBEDDING_PASSAGE_PREFIX)
+            encoded = time.perf_counter()
+            _write_batch([(to_pgvector(vector), chunk_id) for (chunk_id, _, _), vector in zip(batch, vectors)])
+            saved.extend((str(chunk_id), str(copy_id), vector) for (chunk_id, _, copy_id), vector in zip(batch, vectors))
+            encode_seconds += encoded - started
+            write_seconds += time.perf_counter() - encoded
+            written += len(batch)
+            if batch_no % PROGRESS_LOG_BATCHES == 0:
+                log.info("Embedding %d/%d chunk (tinh %.0fs, ghi DB %.0fs)", written, len(rows), encode_seconds, write_seconds)
+    finally:
+        # Lo da ghi DB thi dua vao RAM ngay ca khi lo sau loi, de tim kiem vector khop voi DB
+        vector_store.put(saved)
     log.info("Da sinh embedding cho %d chunk (tinh %.0fs, ghi DB %.0fs)", written, encode_seconds, write_seconds)
     return written
 
@@ -122,20 +128,12 @@ def search(text: str, top_k: int, copy_ids: list[str] | None = None) -> list[tup
     """Tra ve (chunk_id, cosine) giam dan. copy_ids: chi tim trong cac ban so nay."""
     if _model is None:
         raise EmbedderNotReady(f"Model {config.EMBEDDING_MODEL} chua nap xong")
-    query_vector = to_pgvector(_encode(_model, [text], config.EMBEDDING_QUERY_PREFIX)[0])
-    copy_filter = "AND c.digital_copy_id = ANY(%(copies)s::uuid[])" if copy_ids is not None else ""
-    with pool.connection() as conn:
-        rows = conn.execute(
-            f"""SELECT c.id::text, 1 - (c.embedding <=> %(query)s::vector)
-                FROM public.search_document_chunks c
-                JOIN public.digital_copies dc ON dc.id = c.digital_copy_id AND dc.is_current = true
-                JOIN public.documents d ON d.id = c.document_id AND d.deleted_at IS NULL
-                WHERE c.embedding IS NOT NULL {copy_filter}
-                ORDER BY c.embedding <=> %(query)s::vector
-                LIMIT %(limit)s""",
-            {"query": query_vector, "copies": copy_ids, "limit": top_k},
-        ).fetchall()
-    return [(chunk_id, float(score)) for chunk_id, score in rows]
+    # DB khong co chi muc vector (khong du dung luong) nen tim trong RAM, xem app.vector_store
+    query_vector = _encode(_model, [text], config.EMBEDDING_QUERY_PREFIX)[0]
+    try:
+        return vector_store.search(query_vector, top_k, copy_ids)
+    except vector_store.VectorStoreNotReady as ex:
+        raise EmbedderNotReady(str(ex)) from ex
 
 
 def status() -> dict:
@@ -146,4 +144,5 @@ def status() -> dict:
                JOIN public.digital_copies dc ON dc.id = c.digital_copy_id AND dc.is_current = true"""
         ).fetchone()
     return {"model": config.EMBEDDING_MODEL, "dimensions": config.EMBEDDING_DIMENSIONS, "modelLoaded": is_ready(),
-            "totalChunks": total, "embeddedChunks": embedded}
+            "totalChunks": total, "embeddedChunks": embedded,
+            "inMemoryReady": vector_store.is_ready(), "inMemoryChunks": vector_store.size()}

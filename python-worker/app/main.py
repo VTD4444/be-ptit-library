@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from app import embedder, indexer, searcher
+from app import embedder, indexer, searcher, vector_store
 from app.db import pool
 from app.tfidf_index import holder
 
@@ -29,6 +29,8 @@ async def lifespan(_: FastAPI):
         log.exception("Khong nap/lap duoc mo hinh TF-IDF luc khoi dong")
     # Nap model o luong rieng: lan dau phai tai ve mat vai phut, khong duoc chan TF-IDF
     Thread(target=embedder.preload, name="embedding-loader", daemon=True).start()
+    # Kho vector trong RAM: lan dau tai ca kho tu DB (~1 phut), sau do chi tai phan chenh lech so voi file dem
+    Thread(target=vector_store.load, name="vector-store-loader", daemon=True).start()
     yield
     index_executor.shutdown(wait=False, cancel_futures=True)
     pool.close()
@@ -148,6 +150,10 @@ def rebuild_index():
             holder.rebuild(indexer.active_search_config_id())
         except Exception:  # noqa: BLE001
             log.exception("Lap chi muc TF-IDF thu cong that bai")
+        try:
+            vector_store.sync()
+        except Exception:  # noqa: BLE001
+            log.exception("Dong bo kho vector trong RAM that bai")
 
     index_executor.submit(run)
     return {"accepted": True}

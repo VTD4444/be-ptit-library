@@ -22,6 +22,8 @@ CHAPTER_RE = re.compile(r"^(chương|chuong|chapter|phần|phan|part)\s+([0-9]+|
 CHAPTER_SEPARATORS = ":.-–—"
 # Font tieng Viet cu ghi "ư/Ư" thanh U+01A3/U+01A2 ("ƣ/Ƣ", khong co trong tieng Viet) nen phai doi ve ky tu dung
 LOOKALIKE_CHARS = str.maketrans({"ƣ": "ư", "Ƣ": "Ư"})
+DOTLESS_I_RE = re.compile("ı(?=[\u0300-\u036f])")
+SPACE_BEFORE_MARK_RE = re.compile("\\s+(?=[\u0300-\u036f])")
 # "1.2 Gioi thieu", "2.3.1. Mo hinh" - bat buoc chu cai hoa sau so de tranh nham voi so lieu trong cau
 SECTION_RE = re.compile(r"^\d+(\.\d+){1,3}\.?\s+[A-ZÀ-Ỹ]")
 PAGE_NUMBER_RE = re.compile(r"^\s*(trang\s*|page\s*)?\d{1,4}\s*$", re.IGNORECASE)
@@ -79,10 +81,14 @@ def _is_chapter_heading(text: str) -> bool:
 def _clean(text: str) -> str:
     # Doi truoc khi chuan hoa de dau rieng le dat sau "ƣ" van hop nhat duoc thanh "ừ", "ứ"...
     text = text.translate(LOOKALIKE_CHARS)
+    # LaTeX ghi "í" thanh "ı" (i khong cham) + dau sac rieng; dau con sot lai sau khoang trang thi gan ve chu truoc
+    text = DOTLESS_I_RE.sub("i", text)
+    text = SPACE_BEFORE_MARK_RE.sub("", text)
     # NFKC: hop nhat dau tieng Viet nhu NFC, dong thoi tach ligature cua LaTeX ("ﬁ" -> "fi")
     text = unicodedata.normalize("NFKC", text)
     # Bo ky tu vung rieng (Private Use) - thuong la glyph bullet cua font Wingdings/Symbol dinh vao tu
-    text = "".join(ch for ch in text if unicodedata.category(ch) != "Co")
+    # Ky tu dieu khien (Cc, vd NUL cua font toan hoc) cung bo: Postgres khong nhan NUL trong cot text
+    text = "".join(ch for ch in text if unicodedata.category(ch) not in ("Co", "Cc") or ch.isspace())
     # Soft hyphen (U+00AD): Word/PDF hay dung cho dau gach noi that ("no-ron")
     text = text.replace("­", "-")
     return re.sub(r"\s+", " ", text).strip()
@@ -103,6 +109,44 @@ def _toc_by_page(doc: fitz.Document) -> dict[int, list[tuple[int, str]]]:
         if level <= 2 and page >= 1 and title.strip():
             by_page.setdefault(page, []).append((level, _clean(title)[:255]))
     return by_page
+
+
+def _next_base(line_chars: list, i: int):
+    """Bbox cua ky tu thuong (khong phai dau cach / dau rieng) dau tien sau vi tri i trong dong."""
+    for ch, _ in line_chars[i + 1:]:
+        if not ch["c"].isspace() and not unicodedata.combining(ch["c"]):
+            return ch["bbox"]
+    return None
+
+
+def _next_char(line_chars: list, i: int) -> str:
+    """Ky tu thuong dau tien sau vi tri i (bo qua dau cach / dau rieng), "" neu het dong."""
+    for ch, _ in line_chars[i + 1:]:
+        if not ch["c"].isspace() and not unicodedata.combining(ch["c"]):
+            return ch["c"]
+    return ""
+
+
+def _has_real_space(line_chars: list) -> bool:
+    """Dong co it nhat mot dau cach chiem khoang trong that (chu sau bat dau sau dau cach > nguong ranh gioi tu)."""
+    for i, (ch, size) in enumerate(line_chars):
+        if ch["c"].isspace():
+            following = _next_base(line_chars, i)
+            if following is not None and following[0] - ch["bbox"][0] > size * WORD_GAP_RATIO:
+                return True
+    return False
+
+
+def _is_phantom_space(space, previous, following, size: float) -> bool:
+    """
+    Mot so font tieng Viet (Word/VNI xuat PDF) chen ky tu dau cach "ma" sat canh dau rieng de dat dau chong len
+    chu: dau cach nay nam de len chu dung truoc hoac chu dung sau no thay vi chiem mot khoang trong that.
+    Chi xet dau cach ngay canh dau rieng (goi tu _page_lines): co PDF ma dau cach that cung chong len chu.
+    """
+    tolerance = size * 0.05
+    if previous is not None and space[0] < previous[2] - tolerance:
+        return True
+    return following is not None and following[0] < space[2] - tolerance
 
 
 def _page_lines(page: fitz.Page) -> list[_Line]:
@@ -129,20 +173,46 @@ def _page_lines(page: fitz.Page) -> list[_Line]:
                     words.append((text, (round(box[0], 1), round(box[1], 1), round(box[2], 1), round(box[3], 1))))
                 chars, box = [], None
 
-            for span in line["spans"]:
-                gap_limit = span["size"] * WORD_GAP_RATIO
-                for ch in span["chars"]:
-                    bbox = ch["bbox"]
-                    if ch["c"].isspace():
-                        flush()
-                        previous = None
+            line_chars = [(ch, span["size"]) for span in line["spans"] for ch in span["chars"]]
+            has_real_space = _has_real_space(line_chars)
+            for i, (ch, size) in enumerate(line_chars):
+                c, bbox = ch["c"], ch["bbox"]
+                if unicodedata.combining(c):
+                    # Dau tieng Viet la glyph rieng rong 0, co the dat lech trai/phai chu goc: luon gan vao chu dung
+                    # truoc va chi mo rong mep phai cua chu do (khong bao gio thu hep), roi moi tinh khoang trong
+                    if chars:
+                        chars.append(c)
+                    elif words:
+                        words[-1] = (_clean(words[-1][0] + c), words[-1][1])
+                    if previous is not None:
+                        previous = (previous[0], previous[1], max(previous[2], bbox[2]), previous[3])
+                    continue
+                if c.isspace():
+                    beside_mark = any(0 <= j < len(line_chars) and unicodedata.combining(line_chars[j][0]["c"])
+                                      for j in (i - 1, i + 1))
+                    following = _next_base(line_chars, i)
+                    if beside_mark and _is_phantom_space(bbox, previous, following, size):
                         continue
-                    if previous is not None and bbox[0] - previous[2] > gap_limit:
-                        flush()
-                    chars.append(ch["c"])
-                    box = list(bbox) if box is None else [min(box[0], bbox[0]), min(box[1], bbox[1]),
-                                                          max(box[2], bbox[2]), max(box[3], bbox[3])]
-                    previous = bbox
+                    # Dau cach rong 0 (font CID xuat tu Word): chu sau dinh lien chu truoc, khong co khoang trang
+                    # nhin thay tren trang => khong phai ranh gioi tu ("trấ n" -> "trấn", "khá ch" -> "khách")
+                    # Chi ap dung khi: chu truoc la chu co dau (cho dau cach "ma" thay cho glyph dau cu) va dong co
+                    # dau cach that rong binh thuong (co PDF ma moi dau cach deu rong 0 => khong phan biet duoc)
+                    if (previous is not None and following is not None and chars
+                            and len(unicodedata.normalize("NFD", chars[-1])) > 1
+                            and has_real_space
+                            and following[0] - previous[2] <= size * WORD_GAP_RATIO
+                            and following[0] - bbox[0] <= size * WORD_GAP_RATIO
+                            and _next_char(line_chars, i).isalpha()):
+                        continue
+                    flush()
+                    previous = None
+                    continue
+                if previous is not None and bbox[0] - previous[2] > size * WORD_GAP_RATIO:
+                    flush()
+                chars.append(c)
+                box = list(bbox) if box is None else [min(box[0], bbox[0]), min(box[1], bbox[1]),
+                                                      max(box[2], bbox[2]), max(box[3], bbox[3])]
+                previous = bbox
             flush()
             if words:
                 lines.append(_Line(" ".join(w for w, _ in words), block_no, words))
