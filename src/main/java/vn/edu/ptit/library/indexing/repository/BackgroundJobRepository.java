@@ -17,4 +17,6 @@ public interface BackgroundJobRepository extends JpaRepository<BackgroundJob, Lo
     Page<BackgroundJob> findByStatus(String status, Pageable pageable);
 
     List<BackgroundJob> findByTargetId(UUID targetId);
+
+    long countByStatus(String status);
 }

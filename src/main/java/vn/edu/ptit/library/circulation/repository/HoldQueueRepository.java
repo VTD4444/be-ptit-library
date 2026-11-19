@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import vn.edu.ptit.library.circulation.entity.HoldQueue;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,6 +31,8 @@ public interface HoldQueueRepository extends JpaRepository<HoldQueue, Long> {
     Page<HoldQueue> findByUserId(UUID userId, Pageable pageable);
 
     long countByDocumentIdAndStatus(UUID documentId, String status);
+
+    long countByStatusIn(Collection<String> statuses);
 
     @Query("SELECT COALESCE(MAX(h.queuePosition), 0) + 1 FROM HoldQueue h WHERE h.document.id = :documentId AND h.status = 'WAITING'")
     int getNextQueuePosition(@Param("documentId") UUID documentId);

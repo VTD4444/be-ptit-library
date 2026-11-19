@@ -3,6 +3,7 @@ package vn.edu.ptit.library.catalog.dto;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -21,5 +22,6 @@ public class ReviewRequestDto {
     @Max(value = 5, message = "Danh gia cao nhat la 5 sao")
     private Integer rating;
 
+    @Size(max = 2000, message = "Noi dung nhan xet toi da 2000 ky tu")
     private String comment;
 }
