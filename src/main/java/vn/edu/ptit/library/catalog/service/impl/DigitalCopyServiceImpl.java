@@ -2,6 +2,7 @@ package vn.edu.ptit.library.catalog.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +32,7 @@ import vn.edu.ptit.library.common.util.SecurityUtils;
 import vn.edu.ptit.library.indexing.entity.BackgroundJob;
 import vn.edu.ptit.library.indexing.service.IndexingJobService;
 import vn.edu.ptit.library.integration.storage.StorageService;
+import vn.edu.ptit.library.recommendation.event.InteractionRecordedEvent;
 import vn.edu.ptit.library.search.entity.SearchVectorConfig;
 import vn.edu.ptit.library.search.repository.SearchVectorConfigRepository;
 import vn.edu.ptit.library.user.entity.User;
@@ -62,6 +64,7 @@ public class DigitalCopyServiceImpl implements DigitalCopyService {
     private final SearchVectorConfigRepository searchVectorConfigRepository;
     private final IndexingJobService indexingJobService;
     private final BackgroundJobRepository backgroundJobRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -131,7 +134,11 @@ public class DigitalCopyServiceImpl implements DigitalCopyService {
     @Transactional(readOnly = true)
     public Resource downloadPdf(UUID digitalCopyId) {
         DigitalCopy digitalCopy = getById(digitalCopyId);
-        return storageService.loadAsResource(digitalCopy.getFilePath());
+        Resource resource = storageService.loadAsResource(digitalCopy.getFilePath());
+        UUID docId = digitalCopy.getDocument().getId();
+        SecurityUtils.getCurrentUserDetails()
+                .ifPresent(u -> eventPublisher.publishEvent(InteractionRecordedEvent.downloadOrRead(u.getId(), docId)));
+        return resource;
     }
 
     @Override
@@ -142,7 +149,10 @@ public class DigitalCopyServiceImpl implements DigitalCopyService {
         }
         DigitalCopy digitalCopy = digitalCopyRepository.findByDocumentIdAndIsCurrentTrue(documentId)
                 .orElseThrow(() -> new AppException(ErrorCode.DIGITAL_COPY_NOT_FOUND, "Tài liệu này chưa có bản số để đọc trực tuyến"));
-        return storageService.loadAsResource(digitalCopy.getFilePath());
+        Resource resource = storageService.loadAsResource(digitalCopy.getFilePath());
+        SecurityUtils.getCurrentUserDetails()
+                .ifPresent(u -> eventPublisher.publishEvent(InteractionRecordedEvent.downloadOrRead(u.getId(), documentId)));
+        return resource;
     }
 
     @Override

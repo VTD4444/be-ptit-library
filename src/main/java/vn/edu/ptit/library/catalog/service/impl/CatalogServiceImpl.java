@@ -1,6 +1,7 @@
 package vn.edu.ptit.library.catalog.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,8 @@ import vn.edu.ptit.library.common.dto.PaginationRequest;
 import vn.edu.ptit.library.common.enums.PhysicalCopyStatus;
 import vn.edu.ptit.library.common.exception.AppException;
 import vn.edu.ptit.library.common.exception.ErrorCode;
+import vn.edu.ptit.library.common.util.SecurityUtils;
+import vn.edu.ptit.library.recommendation.event.InteractionRecordedEvent;
 import vn.edu.ptit.library.user.entity.Department;
 import vn.edu.ptit.library.user.repository.DepartmentRepository;
 
@@ -53,6 +56,7 @@ public class CatalogServiceImpl implements CatalogService {
     private final PhysicalCopyRepository physicalCopyRepository;
     private final DigitalCopyRepository digitalCopyRepository;
     private final ReviewRepository reviewRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional(readOnly = true)
@@ -67,6 +71,9 @@ public class CatalogServiceImpl implements CatalogService {
         Document doc = getDocumentEntityOrThrow(id);
         List<DocumentDepartment> departments = documentDepartmentRepository.findByDocumentId(id);
         Optional<DigitalCopy> digital = digitalCopyRepository.findByDocumentIdAndIsCurrentTrue(id);
+
+        SecurityUtils.getCurrentUserDetails()
+                .ifPresent(u -> eventPublisher.publishEvent(InteractionRecordedEvent.viewDetail(u.getId(), doc.getId())));
 
         return DocumentDetailDto.builder()
                 .id(doc.getId())

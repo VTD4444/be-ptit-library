@@ -38,6 +38,7 @@ build/
 uploads/
 .agents/
 .venv/
+/supabase_public.sql
 
 ### Ghi chu ca nhan (khong commit) ###
 NOTES.local.md

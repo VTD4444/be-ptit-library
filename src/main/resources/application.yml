@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: optional:file:.env[.properties]
   application:
     name: smart-library-backend
   profiles:
@@ -63,3 +65,12 @@ app:
   search:
     # Nguong do tuong dong cosine TF-IDF toi thieu de coi la khop
     min-score: ${SEARCH_MIN_SCORE:0.05}
+  recommendation:
+    similar-min-score: ${REC_SIMILAR_MIN_SCORE:0.05}
+    similar-model-version: ${REC_SIMILAR_MODEL_VERSION:tfidf-v1}
+    similar-top-k: ${REC_SIMILAR_TOP_K:20}
+    ease-model-version: ${REC_EASE_MODEL_VERSION:ease-v1}
+    ease-lambda: ${REC_EASE_LAMBDA:500.0}
+    ease-cache-top-k: ${REC_EASE_CACHE_TOP_K:20}
+    ease-cache-ttl-hours: ${REC_EASE_CACHE_TTL_HOURS:24}
+    ease-only-available: ${REC_EASE_ONLY_AVAILABLE:false}

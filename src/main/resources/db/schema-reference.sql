@@ -1,7 +1,7 @@
 -- =============================================================================
 -- FILE THAM CHIEU SCHEMA DATABASE (SUPABASE POSTGRESQL)
--- He thong Thu vien so thong minh PTIT (25 Bang)
--- Luu y: File nay dung de tra cuu cau truc DB hien tai tren Supabase.
+-- He thong Thu vien so thong minh PTIT (26 Bang)
+-- Luu y: File nay dung de tra cuu cau truc DB hien tai tren PostgreSQL.
 -- =============================================================================
 
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -324,3 +324,23 @@ CREATE TABLE IF NOT EXISTS public.message_queue (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- 26. interaction_logs
+CREATE TABLE IF NOT EXISTS public.interaction_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES public.users(id),
+    document_id UUID NOT NULL REFERENCES public.documents(id),
+    event_type VARCHAR(32) NOT NULL,
+    rating_stars INTEGER CHECK (rating_stars IS NULL OR (rating_stars >= 1 AND rating_stars <= 5)),
+    implicit_weight DOUBLE PRECISION NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_interaction_logs_user_doc_created
+    ON public.interaction_logs (user_id, document_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_interaction_logs_created_at
+    ON public.interaction_logs (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_interaction_logs_doc_id
+    ON public.interaction_logs (document_id);

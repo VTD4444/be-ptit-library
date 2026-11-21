@@ -2,6 +2,7 @@ package vn.edu.ptit.library.circulation.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -53,6 +54,7 @@ import vn.edu.ptit.library.common.enums.PhysicalCopyStatus;
 import vn.edu.ptit.library.common.exception.AppException;
 import vn.edu.ptit.library.common.exception.ErrorCode;
 import vn.edu.ptit.library.common.util.SecurityUtils;
+import vn.edu.ptit.library.recommendation.event.InteractionRecordedEvent;
 import vn.edu.ptit.library.security.CustomUserDetails;
 import vn.edu.ptit.library.user.entity.User;
 import vn.edu.ptit.library.user.repository.UserRepository;
@@ -85,6 +87,7 @@ public class CirculationServiceImpl implements CirculationService {
     private final CirculationFineRepository circulationFineRepository;
     private final PenaltyTypeRepository penaltyTypeRepository;
     private final DocumentAuthorRepository documentAuthorRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -197,6 +200,7 @@ public class CirculationServiceImpl implements CirculationService {
             physicalCopyRepository.save(copy);
 
             Circulation savedCirculation = circulationRepository.save(circulation);
+            eventPublisher.publishEvent(InteractionRecordedEvent.borrow(user.getId(), document.getId()));
 
             borrowedItems.add(BorrowedItemDto.builder()
                     .circulationId(savedCirculation.getId())

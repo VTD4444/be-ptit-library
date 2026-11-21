@@ -20,14 +20,14 @@ src/main/java/vn/edu/ptit/library/
 ├── circulation/             # Module 3: Luu thong, Chinh sach muon, Phat, Hang cho dat truoc (Bang 12..16)
 ├── indexing/                # Module 4: Hang doi tien trinh nen boc tach PDF & event log (Bang 17)
 ├── search/                  # Module 5: Cau hinh vector, Doan van ban chunk, Embedding, Tuong dong (Bang 18..21)
-├── recommendation/          # Module 6: Registry mo hinh goi y, Cache goi y ca nhan hoa (Bang 22, 23)
+├── recommendation/          # Module 6: Registry mo hinh goi y, Cache goi y, Log tuong tac (Bang 22, 23, 26)
 ├── analytics/               # Module 7: De xuat bo sung tu cum query rong, Thong ke kho (Bang 24)
 └── notification/            # Module 8: Hang doi tin nhan thong bao, Cronjob nhac qua han (Bang 25)
 ```
 
 ---
 
-## 2. Bảng Tra Cứu 25 Bảng Supabase sang 25 JPA Entities & Repositories
+## 2. Bảng Tra Cứu 26 Bảng PostgreSQL sang 26 JPA Entities & Repositories
 
 | STT | Bảng trong Supabase | JPA Entity | Spring Data Repository | Module |
 |:---:|:---|:---|:---|:---|
@@ -56,6 +56,7 @@ src/main/java/vn/edu/ptit/library/
 | 23 | `recommendations_cache` | `RecommendationCache` (`RecommendationCacheId`) | `RecommendationCacheRepository` | `recommendation` |
 | 24 | `acquisition_suggestions` | `AcquisitionSuggestion` | `AcquisitionSuggestionRepository` | `analytics` |
 | 25 | `message_queue` | `MessageQueue` | `MessageQueueRepository` | `notification` |
+| 26 | `interaction_logs` | `InteractionLog` | `InteractionLogRepository` | `recommendation` |
 
 ---
 

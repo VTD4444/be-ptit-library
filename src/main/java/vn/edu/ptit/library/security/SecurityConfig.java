@@ -56,6 +56,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/catalog/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/search/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/search/smart").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/recommendations/similar/**").permitAll()
                         // All other endpoints require authentication
                         .anyRequest().authenticated()
                 );
