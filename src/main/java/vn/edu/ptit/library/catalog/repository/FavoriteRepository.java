@@ -3,6 +3,8 @@ package vn.edu.ptit.library.catalog.repository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import vn.edu.ptit.library.catalog.entity.Favorite;
 
@@ -17,6 +19,12 @@ public interface FavoriteRepository extends JpaRepository<Favorite, Long> {
     boolean existsByUserIdAndDocumentId(UUID userId, UUID documentId);
 
     Page<Favorite> findByUserId(UUID userId, Pageable pageable);
+
+    @Query(
+            value = "SELECT f FROM Favorite f JOIN FETCH f.document d WHERE f.user.id = :userId",
+            countQuery = "SELECT COUNT(f) FROM Favorite f JOIN f.document d WHERE f.user.id = :userId"
+    )
+    Page<Favorite> findActiveFavoritesByUserId(@Param("userId") UUID userId, Pageable pageable);
 
     long countByDocumentId(UUID documentId);
 }

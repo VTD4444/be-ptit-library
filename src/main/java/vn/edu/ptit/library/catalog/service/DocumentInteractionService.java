@@ -1,7 +1,10 @@
 package vn.edu.ptit.library.catalog.service;
 
+import vn.edu.ptit.library.catalog.dto.DocumentReviewsResponseDto;
+import vn.edu.ptit.library.catalog.dto.FavoriteDocumentDto;
+import vn.edu.ptit.library.catalog.dto.FavoriteToggleResponseDto;
+import vn.edu.ptit.library.catalog.dto.ReviewDto;
 import vn.edu.ptit.library.catalog.dto.ReviewRequestDto;
-import vn.edu.ptit.library.catalog.entity.Review;
 import vn.edu.ptit.library.common.dto.PageResponse;
 import vn.edu.ptit.library.common.dto.PaginationRequest;
 
@@ -9,11 +12,13 @@ import java.util.UUID;
 
 public interface DocumentInteractionService {
 
-    boolean toggleFavorite(UUID documentId);
+    FavoriteToggleResponseDto toggleFavorite(UUID documentId);
 
-    boolean isFavorite(UUID documentId);
+    FavoriteToggleResponseDto isFavorite(UUID documentId);
 
-    Review addOrUpdateReview(UUID documentId, ReviewRequestDto request);
+    PageResponse<FavoriteDocumentDto> getMyFavorites(PaginationRequest request);
 
-    PageResponse<Review> getDocumentReviews(UUID documentId, PaginationRequest request);
+    ReviewDto addOrUpdateReview(UUID documentId, ReviewRequestDto request);
+
+    DocumentReviewsResponseDto getDocumentReviews(UUID documentId, PaginationRequest request);
 }

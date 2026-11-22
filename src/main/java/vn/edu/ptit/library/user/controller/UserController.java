@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import vn.edu.ptit.library.catalog.dto.FavoriteDocumentDto;
+import vn.edu.ptit.library.catalog.service.DocumentInteractionService;
 import vn.edu.ptit.library.common.dto.ApiResponse;
 import vn.edu.ptit.library.common.dto.PageResponse;
 import vn.edu.ptit.library.common.dto.PaginationRequest;
@@ -30,6 +32,7 @@ import java.util.UUID;
 public class UserController {
 
     private final UserService userService;
+    private final DocumentInteractionService documentInteractionService;
 
     @GetMapping("/profile")
     @Operation(summary = "Xem thong tin ca nhan hien tai")
@@ -43,6 +46,12 @@ public class UserController {
     public ApiResponse<UserProfileResponse> updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
         UUID currentUserId = SecurityUtils.getCurrentUserIdOrThrow();
         return ApiResponse.success("Cập nhật thông tin liên hệ thành công", userService.updateProfile(currentUserId, request));
+    }
+
+    @GetMapping("/me/favorites")
+    @Operation(summary = "Xem danh sach tai lieu yeu thich (tu sach ca nhan) co phan trang")
+    public ApiResponse<PageResponse<FavoriteDocumentDto>> getMyFavorites(@Valid @ModelAttribute PaginationRequest request) {
+        return ApiResponse.success(documentInteractionService.getMyFavorites(request));
     }
 
     @GetMapping("/{id}")
