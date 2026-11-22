@@ -17,6 +17,8 @@ UPLOAD_ROOT = Path(_upload_root).resolve() if _upload_root else None
 DATA_DIR = Path(os.getenv("DATA_DIR", "./data")).resolve()
 MODEL_DIR = DATA_DIR / "tfidf"
 COPIES_DIR = DATA_DIR / "copies"
+# So ban so giu trong cache RAM (copy_store). 64 ban co the chiem 2-7 GB.
+COPY_CACHE_SIZE = int(os.getenv("COPY_CACHE_SIZE", "64"))
 
 SYNONYMS_FILE = Path(os.getenv("SYNONYMS_FILE", Path(__file__).with_name("synonyms.txt"))).resolve()
 
