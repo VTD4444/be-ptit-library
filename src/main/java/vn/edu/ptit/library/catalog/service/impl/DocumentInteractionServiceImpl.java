@@ -1,6 +1,7 @@
 package vn.edu.ptit.library.catalog.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -29,6 +30,7 @@ import vn.edu.ptit.library.common.dto.PaginationRequest;
 import vn.edu.ptit.library.common.exception.AppException;
 import vn.edu.ptit.library.common.exception.ErrorCode;
 import vn.edu.ptit.library.common.util.SecurityUtils;
+import vn.edu.ptit.library.recommendation.event.InteractionRecordedEvent;
 import vn.edu.ptit.library.user.entity.User;
 import vn.edu.ptit.library.user.repository.UserRepository;
 
@@ -56,6 +58,7 @@ public class DocumentInteractionServiceImpl implements DocumentInteractionServic
     private final PhysicalCopyRepository physicalCopyRepository;
     private final DigitalCopyRepository digitalCopyRepository;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -80,6 +83,8 @@ public class DocumentInteractionServiceImpl implements DocumentInteractionServic
             favoriteRepository.save(favorite);
             isFav = true;
         }
+
+        eventPublisher.publishEvent(InteractionRecordedEvent.favorite(userId, documentId, isFav));
 
         return FavoriteToggleResponseDto.builder()
                 .documentId(documentId)
@@ -182,6 +187,7 @@ public class DocumentInteractionServiceImpl implements DocumentInteractionServic
         review.setComment(StringUtils.hasText(trimmedComment) ? trimmedComment : null);
 
         Review saved = reviewRepository.save(review);
+        eventPublisher.publishEvent(InteractionRecordedEvent.rate(userId, documentId, saved.getRating()));
         return toReviewDto(saved, user, documentId);
     }
 

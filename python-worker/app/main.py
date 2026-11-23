@@ -1,4 +1,5 @@
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from threading import Thread
@@ -11,6 +12,8 @@ from pydantic.alias_generators import to_camel
 
 from app import embedder, indexer, searcher, vector_store
 from app.db import pool
+from app.recommendation.ease_service import ease_holder
+from app.recommendation.router import router as recommendation_router
 from app.tfidf_index import holder
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s - %(message)s")
@@ -24,19 +27,25 @@ index_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="indexer")
 async def lifespan(_: FastAPI):
     pool.open(wait=True)
     try:
-        holder.load_or_build(indexer.active_search_config_id())
+        ease_holder.load_if_exists()
     except Exception:  # noqa: BLE001
-        log.exception("Khong nap/lap duoc mo hinh TF-IDF luc khoi dong")
-    # Nap model o luong rieng: lan dau phai tai ve mat vai phut, khong duoc chan TF-IDF
-    Thread(target=embedder.preload, name="embedding-loader", daemon=True).start()
-    # Kho vector trong RAM: lan dau tai ca kho tu DB (~1 phut), sau do chi tai phan chenh lech so voi file dem
-    Thread(target=vector_store.load, name="vector-store-loader", daemon=True).start()
+        log.exception("Khong nap duoc mo hinh EASE luc khoi dong")
+    if os.getenv("SKIP_SEARCH_STARTUP", "").strip().lower() not in ("1", "true", "yes"):
+        try:
+            holder.load_or_build(indexer.active_search_config_id())
+        except Exception:  # noqa: BLE001
+            log.exception("Khong nap/lap duoc mo hinh TF-IDF luc khoi dong")
+        # Nap model o luong rieng: lan dau phai tai ve mat vai phut, khong duoc chan TF-IDF
+        Thread(target=embedder.preload, name="embedding-loader", daemon=True).start()
+        # Kho vector trong RAM: lan dau tai ca kho tu DB (~1 phut), sau do chi tai phan chenh lech so voi file dem
+        Thread(target=vector_store.load, name="vector-store-loader", daemon=True).start()
     yield
     index_executor.shutdown(wait=False, cancel_futures=True)
     pool.close()
 
 
 app = FastAPI(title="PTIT Library Python Worker", lifespan=lifespan)
+app.include_router(recommendation_router)
 
 
 class CamelModel(BaseModel):

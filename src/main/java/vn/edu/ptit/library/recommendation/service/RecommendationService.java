@@ -1,5 +1,6 @@
 package vn.edu.ptit.library.recommendation.service;
 
+import vn.edu.ptit.library.integration.python.dto.EaseRebuildResponse;
 import vn.edu.ptit.library.recommendation.dto.RecommendationItemDto;
 
 import java.util.List;
@@ -10,4 +11,6 @@ public interface RecommendationService {
     List<RecommendationItemDto> getRecommendationsForUser(UUID userId, int limit);
 
     List<RecommendationItemDto> getMyRecommendations(int limit);
+
+    EaseRebuildResponse rebuildPersonalizedModel();
 }

@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -17,7 +18,14 @@ public class RecommendationItemDto {
 
     private UUID documentId;
     private String title;
+    private List<String> authors;
+    private String coverUrl;
+    private String abstractText;
     private String docType;
+    private Integer publicationYear;
+    private long totalPhysicalCopies;
+    private long availablePhysicalCopies;
+    private boolean hasDigitalCopy;
     private Double score;
     private Integer rank;
     private String reason;

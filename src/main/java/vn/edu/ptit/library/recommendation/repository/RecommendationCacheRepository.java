@@ -14,7 +14,7 @@ import java.util.UUID;
 @Repository
 public interface RecommendationCacheRepository extends JpaRepository<RecommendationCache, RecommendationCacheId> {
 
-    @Query("SELECT r FROM RecommendationCache r WHERE r.user.id = :userId AND (r.expiresAt IS NULL OR r.expiresAt > :now) ORDER BY r.rank ASC")
+    @Query("SELECT r FROM RecommendationCache r JOIN FETCH r.document JOIN FETCH r.algorithm WHERE r.user.id = :userId AND (r.expiresAt IS NULL OR r.expiresAt > :now) ORDER BY r.rank ASC")
     List<RecommendationCache> findValidRecommendationsByUserId(@Param("userId") UUID userId, @Param("now") OffsetDateTime now);
 
     void deleteByUserId(UUID userId);

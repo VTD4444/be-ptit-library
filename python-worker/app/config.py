@@ -19,6 +19,12 @@ MODEL_DIR = DATA_DIR / "tfidf"
 COPIES_DIR = DATA_DIR / "copies"
 # So ban so giu trong cache RAM (copy_store). 64 ban co the chiem 2-7 GB.
 COPY_CACHE_SIZE = int(os.getenv("COPY_CACHE_SIZE", "64"))
+EASE_DIR = DATA_DIR / "ease"
+
+EASE_MODEL_VERSION = os.getenv("EASE_MODEL_VERSION", "ease-v1")
+EASE_LAMBDA = float(os.getenv("EASE_LAMBDA", "500.0"))
+EASE_CACHE_TOP_K = int(os.getenv("EASE_CACHE_TOP_K", "20"))
+EASE_CACHE_TTL_HOURS = int(os.getenv("EASE_CACHE_TTL_HOURS", "24"))
 
 SYNONYMS_FILE = Path(os.getenv("SYNONYMS_FILE", Path(__file__).with_name("synonyms.txt"))).resolve()
 
