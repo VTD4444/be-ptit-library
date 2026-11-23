@@ -20,7 +20,9 @@ public final class DocumentSpecification {
         return Specification.where(hasKeyword(filter.getKeyword()))
                 .and(hasDocType(filter.getDocType()))
                 .and(hasPublicationYear(filter.getPublicationYear()))
+                .and(hasLanguage(filter.getLanguage()))
                 .and(hasAuthor(filter.getAuthorId()))
+                .and(hasAuthorName(filter.getAuthorName()))
                 .and(hasDepartment(filter.getDepartmentId()));
     }
 
@@ -61,6 +63,14 @@ public final class DocumentSpecification {
         return (root, query, cb) -> cb.equal(root.get("publicationYear"), year);
     }
 
+    public static Specification<Document> hasLanguage(String language) {
+        if (!StringUtils.hasText(language)) {
+            return null;
+        }
+
+        return (root, query, cb) -> cb.equal(cb.lower(root.get("language")), language.trim().toLowerCase());
+    }
+
     public static Specification<Document> hasAuthor(Long authorId) {
         if (authorId == null) {
             return null;
@@ -71,6 +81,23 @@ public final class DocumentSpecification {
             Root<DocumentAuthor> da = sub.from(DocumentAuthor.class);
             sub.select(da.get("id").get("documentId"))
                     .where(cb.equal(da.get("id").get("authorId"), authorId));
+
+            return root.get("id").in(sub);
+        };
+    }
+
+    public static Specification<Document> hasAuthorName(String authorName) {
+        if (!StringUtils.hasText(authorName)) {
+            return null;
+        }
+
+        String pattern = "%" + authorName.trim().toLowerCase() + "%";
+
+        return (root, query, cb) -> {
+            Subquery<UUID> sub = query.subquery(UUID.class);
+            Root<DocumentAuthor> da = sub.from(DocumentAuthor.class);
+            sub.select(da.get("id").get("documentId"))
+                    .where(cb.like(cb.lower(da.get("author").get("name")), pattern));
 
             return root.get("id").in(sub);
         };

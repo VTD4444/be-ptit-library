@@ -17,5 +17,7 @@ public class DocumentFilterRequest {
     private Long departmentId;
     private String docType;
     private Long authorId;
+    private String authorName;
     private Integer publicationYear;
+    private String language;
 }

@@ -26,6 +26,8 @@ public class SmartSearchRequest {
     private String language;
     private String docType;
     private Long departmentId;
+    private String authorName;
+    private Integer publicationYear;
 
     // Tuy chon: tfidf | vector | hybrid. Bo trong thi dung SEARCH_MODE cua worker
     private String searchMode;

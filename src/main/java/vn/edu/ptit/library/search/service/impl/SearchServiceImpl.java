@@ -115,7 +115,11 @@ public class SearchServiceImpl implements SearchService {
         }
         List<String> terms = SearchTextUtils.extractTerms(query);
         DocumentFilter filter = new DocumentFilter(
-                blankToNull(request.getLanguage()), blankToNull(request.getDocType()), request.getDepartmentId());
+                blankToNull(request.getLanguage()),
+                blankToNull(request.getDocType()),
+                request.getDepartmentId(),
+                blankToNull(request.getAuthorName()),
+                request.getPublicationYear());
 
         Ranking ranking = rank(query, terms, null, filter, true, request.getLimit(), MAX_LOCATIONS_PER_RESULT,
                 request.getSearchMode());

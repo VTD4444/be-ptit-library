@@ -41,9 +41,23 @@ public class ContentSearchRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
-    public record DocumentFilter(String language, String docType, Long departmentId) {
+    public record DocumentFilter(
+            String language,
+            String docType,
+            Long departmentId,
+            String authorName,
+            Integer publicationYear) {
+
+        public DocumentFilter(String language, String docType, Long departmentId) {
+            this(language, docType, departmentId, null, null);
+        }
+
         public boolean isEmpty() {
-            return language == null && docType == null && departmentId == null;
+            return language == null
+                    && docType == null
+                    && departmentId == null
+                    && authorName == null
+                    && publicationYear == null;
         }
     }
 
@@ -158,6 +172,16 @@ public class ContentSearchRepository {
             sql.append(" AND EXISTS (SELECT 1 FROM public.document_departments dd"
                     + " WHERE dd.document_id = d.id AND dd.department_id = :departmentId)");
             params.addValue("departmentId", filter.departmentId());
+        }
+        if (filter.authorName() != null) {
+            sql.append(" AND EXISTS (SELECT 1 FROM public.document_authors da"
+                    + " JOIN public.authors a ON a.id = da.author_id"
+                    + " WHERE da.document_id = d.id AND lower(a.name) LIKE lower(:authorNamePattern))");
+            params.addValue("authorNamePattern", "%" + filter.authorName().trim() + "%");
+        }
+        if (filter.publicationYear() != null) {
+            sql.append(" AND d.publication_year = :publicationYear");
+            params.addValue("publicationYear", filter.publicationYear());
         }
         return sql.toString();
     }
