@@ -8,7 +8,15 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.util.StringUtils;
 import vn.edu.ptit.library.catalog.dto.DigitalCopyUploadResponse;
+import vn.edu.ptit.library.catalog.dto.DigitalProcessingItemDto;
+import vn.edu.ptit.library.catalog.dto.DigitalProcessingListResponse;
+import vn.edu.ptit.library.common.dto.PageResponse;
+import vn.edu.ptit.library.indexing.repository.BackgroundJobRepository;
 import vn.edu.ptit.library.catalog.dto.ProcessingStatusResponse;
 import vn.edu.ptit.library.catalog.entity.DigitalCopy;
 import vn.edu.ptit.library.catalog.entity.Document;
@@ -31,7 +39,13 @@ import vn.edu.ptit.library.user.repository.UserRepository;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -47,6 +61,7 @@ public class DigitalCopyServiceImpl implements DigitalCopyService {
     private final StorageService storageService;
     private final SearchVectorConfigRepository searchVectorConfigRepository;
     private final IndexingJobService indexingJobService;
+    private final BackgroundJobRepository backgroundJobRepository;
 
     @Override
     @Transactional
@@ -163,6 +178,101 @@ public class DigitalCopyServiceImpl implements DigitalCopyService {
     public DigitalCopy getById(UUID digitalCopyId) {
         return digitalCopyRepository.findById(digitalCopyId)
                 .orElseThrow(() -> new AppException(ErrorCode.DIGITAL_COPY_NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DigitalProcessingListResponse listForProcessing(String status, String keyword, int page, int size) {
+        List<String> statuses;
+        if (StringUtils.hasText(status)) {
+            try {
+                statuses = List.of(DigitalProcessingStatus.valueOf(status.trim().toUpperCase()).name());
+            } catch (IllegalArgumentException ex) {
+                throw new AppException(ErrorCode.INVALID_REQUEST, "Trạng thái xử lý không hợp lệ: " + status);
+            }
+        } else {
+            statuses = Arrays.stream(DigitalProcessingStatus.values()).map(Enum::name).toList();
+        }
+        String pattern = "%" + (StringUtils.hasText(keyword) ? keyword.trim().toLowerCase() : "") + "%";
+        PageRequest pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
+                Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        Page<DigitalCopy> copies = digitalCopyRepository.searchForProcessing(statuses, pattern, pageable);
+
+        // Tien trinh gan nhat cua tung ban so (id lon nhat)
+        Map<UUID, BackgroundJob> latestJobs = new HashMap<>();
+        List<UUID> ids = copies.getContent().stream().map(DigitalCopy::getId).toList();
+        if (!ids.isEmpty()) {
+            for (BackgroundJob job : backgroundJobRepository.findByJobTypeAndTargetIdIn(IndexingJobService.PDF_INDEXING_JOB_TYPE, ids)) {
+                latestJobs.merge(job.getTargetId(), job, (a, b) -> a.getId() >= b.getId() ? a : b);
+            }
+        }
+
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (DigitalProcessingStatus s : DigitalProcessingStatus.values()) {
+            counts.put(s.name(), 0L);
+        }
+        for (Object[] row : digitalCopyRepository.countByProcessingStatus()) {
+            if (row[0] != null) {
+                counts.put(String.valueOf(row[0]), ((Number) row[1]).longValue());
+            }
+        }
+
+        return DigitalProcessingListResponse.builder()
+                .statusCounts(counts)
+                .page(PageResponse.from(copies, copy -> toProcessingItem(copy, latestJobs.get(copy.getId()))))
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public DigitalProcessingItemDto reprocess(UUID digitalCopyId) {
+        DigitalCopy copy = getById(digitalCopyId);
+        String current = copy.getProcessingStatus();
+        if (!DigitalProcessingStatus.FAILED.name().equals(current)
+                && !DigitalProcessingStatus.LOW_QUALITY.name().equals(current)) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Chỉ chạy lại được bản số đang lỗi hoặc chất lượng thấp (hiện tại: " + current + ")");
+        }
+        Path absolute = storageService.resolveAbsolutePath(copy.getFilePath());
+        if (!Files.exists(absolute)) {
+            throw new AppException(ErrorCode.DIGITAL_COPY_NOT_FOUND,
+                    "Không tìm thấy tệp PDF trên máy chủ, hãy tải lại tệp cho tài liệu này");
+        }
+
+        Long searchConfigId = searchVectorConfigRepository.findByIsActiveTrue()
+                .map(SearchVectorConfig::getId)
+                .orElse(null);
+        copy.setProcessingStatus(DigitalProcessingStatus.PENDING.name());
+        digitalCopyRepository.save(copy);
+        BackgroundJob job = indexingJobService.enqueuePdfIndexingJob(
+                copy.getId(), copy.getDocument().getId(), absolute.toString(), searchConfigId);
+        return toProcessingItem(copy, job);
+    }
+
+    private DigitalProcessingItemDto toProcessingItem(DigitalCopy copy, BackgroundJob job) {
+        Document doc = copy.getDocument();
+        User uploader = copy.getUploadedBy();
+        return DigitalProcessingItemDto.builder()
+                .digitalCopyId(copy.getId())
+                .documentId(doc != null ? doc.getId() : null)
+                .documentTitle(doc != null ? doc.getTitle() : null)
+                .fileName(copy.getFileName())
+                .fileSize(copy.getFileSize())
+                .version(copy.getVersion())
+                .isCurrent(copy.getIsCurrent())
+                .pageCount(copy.getPageCount())
+                .extractionQuality(copy.getExtractionQuality())
+                .processingStatus(copy.getProcessingStatus())
+                .uploadedAt(copy.getCreatedAt())
+                .uploadedBy(uploader != null ? uploader.getFullName() : null)
+                .jobId(job != null ? job.getId() : null)
+                .jobStatus(job != null ? job.getStatus() : null)
+                .attempts(job != null ? job.getAttempts() : null)
+                .errorMessage(job != null ? job.getErrorMessage() : null)
+                .startedAt(job != null ? job.getStartedAt() : null)
+                .finishedAt(job != null ? job.getFinishedAt() : null)
+                .build();
     }
 
     private void validatePdf(MultipartFile file) throws IOException {
