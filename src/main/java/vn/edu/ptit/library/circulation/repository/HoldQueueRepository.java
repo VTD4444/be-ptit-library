@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import vn.edu.ptit.library.circulation.entity.HoldQueue;
 
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -29,6 +30,21 @@ public interface HoldQueueRepository extends JpaRepository<HoldQueue, Long> {
     Optional<HoldQueue> findByPhysicalCopyIdAndStatus(UUID physicalCopyId, String status);
 
     Page<HoldQueue> findByUserId(UUID userId, Pageable pageable);
+
+    @Query("SELECT h FROM HoldQueue h JOIN FETCH h.document LEFT JOIN FETCH h.physicalCopy "
+            + "WHERE h.user.id = :userId ORDER BY h.requestDate DESC, h.id DESC")
+    List<HoldQueue> findAllByUserIdWithDetails(@Param("userId") UUID userId);
+
+    @Query("SELECT h FROM HoldQueue h JOIN FETCH h.document d JOIN FETCH h.user u LEFT JOIN FETCH h.physicalCopy "
+            + "WHERE h.status IN :statuses AND (LOWER(d.title) LIKE :keyword OR LOWER(u.userCode) LIKE :keyword "
+            + "OR LOWER(u.fullName) LIKE :keyword OR LOWER(COALESCE(u.email, '')) LIKE :keyword) "
+            + "ORDER BY d.title ASC, h.queuePosition ASC NULLS FIRST, h.id ASC")
+    List<HoldQueue> searchForStaff(@Param("statuses") Collection<String> statuses,
+                                   @Param("keyword") String keyword,
+                                   Pageable pageable);
+
+    @Query("SELECT h FROM HoldQueue h WHERE h.status = 'READY_FOR_PICKUP' AND h.pickupDeadline < :now ORDER BY h.pickupDeadline ASC")
+    List<HoldQueue> findReadyHoldsPastPickupDeadline(@Param("now") OffsetDateTime now);
 
     long countByDocumentIdAndStatus(UUID documentId, String status);
 

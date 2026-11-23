@@ -69,7 +69,8 @@ class CopyData:
 
 _cache: "OrderedDict[str, tuple[float, CopyData]]" = OrderedDict()
 _cache_lock = threading.Lock()
-_CACHE_SIZE = 64
+# Moi ban so trong RAM ton ~30-120 MB (list Python cua dong tu + bbox), nen gioi han theo so ban so phai nho
+_CACHE_SIZE = config.COPY_CACHE_SIZE
 
 
 def _path(copy_id: str):

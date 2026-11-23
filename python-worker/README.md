@@ -4,7 +4,7 @@ Service FastAPI chạy cạnh Spring Boot, cài đặt theo hai tài liệu:
 - **"XỬ LÝ VĂN BẢN"**: TF-IDF (unigram + bigram, sublinear TF, smooth IDF, chuẩn hoá L2, cắt tỉa từ điển) + cosine.
 - **Lecture 8 – Text indexing and Boolean query model**: tiền xử lý (có gom đồng nghĩa), inverted file, positional index, truy vấn Boolean AND/OR/NOT, cụm từ.
 
-Ngoài TF-IDF còn có tìm theo nghĩa bằng embedding (pgvector) và chế độ lai, xem mục [Chế độ tìm kiếm](#chế-độ-tìm-kiếm-tfidf--vector--hybrid).
+Ngoài TF-IDF còn có tìm theo nghĩa bằng embedding (lưu trên pgvector, tìm trong RAM của worker) và chế độ lai, xem mục [Chế độ tìm kiếm](#chế-độ-tìm-kiếm-tfidf--vector--hybrid).
 
 Kho chủ yếu tiếng Việt nên có điều chỉnh (xem dưới). Không có OCR.
 Spring gọi sang qua `app.python-worker.base-url` (mặc định `http://localhost:8000`).
@@ -14,8 +14,8 @@ Spring gọi sang qua `app.python-worker.base-url` (mặc định `http://localh
 | `GET /health` | `PythonWorkerClient.isWorkerHealthy` | Kiểm tra sống + kích thước mô hình |
 | `POST /api/extract-index` | Upload PDF (`/api/admin/documents/{id}/digital-copies`) | Nhận job, trả 202, xử lý ngầm |
 | `POST /api/search` | `/api/search/smart`, `/api/search/document/{id}/matches` | Lọc Boolean → xếp hạng cosine → gộp chunk gối nhau → định vị |
-| `POST /api/index/rebuild` | Thủ công | Lập chỉ mục lại (sau khi xoá tài liệu, sửa từ điển đồng nghĩa...) |
-| `GET /api/embeddings/status` | Thủ công | Model đã nạp chưa, bao nhiêu chunk đã có embedding |
+| `POST /api/index/rebuild` | Thủ công | Lập chỉ mục TF-IDF lại và đồng bộ kho vector trong RAM (sau khi xoá tài liệu, sửa từ điển đồng nghĩa, nạp lô...) |
+| `GET /api/embeddings/status` | Thủ công | Model đã nạp chưa, bao nhiêu chunk đã có embedding, kho vector trong RAM đã nạp chưa (`inMemoryReady`, `inMemoryChunks`) |
 | `POST /api/embeddings/backfill[?force=true]` | Thủ công | Sinh embedding cho chunk còn thiếu (trả 202, chạy ngầm); `force=true` sinh lại hết, dùng sau khi đổi model |
 
 ## Dữ liệu (`DATA_DIR`, mặc định `./data`)
@@ -26,6 +26,8 @@ data/
   tfidf/
     vocabulary.json  idf.npy  matrix.npz  documents.json   # 4 thành phần mục 1.7 (XLVB)
     inverted.json                                          # inverted file: term -> các bản số chứa term
+  vectors/
+    embeddings.npz                   # bản đệm của kho vector trong RAM (float16), xoá đi thì tự tải lại từ DB
 ```
 
 **Dòng từ chuẩn**: mỗi bản số có một dãy từ duy nhất, mỗi từ mang trang, đoạn, câu, dòng, toạ độ trên trang
@@ -64,7 +66,7 @@ Bước xếp hạng chunk có 3 chế độ. Mỗi request chọn qua `searchMo
 | Chế độ | Cách xếp hạng | Điểm trả về |
 | --- | --- | --- |
 | `tfidf` | Cosine TF-IDF như trên | cosine TF-IDF, lọc theo `minScore` |
-| `vector` | Cosine giữa embedding truy vấn và embedding chunk (pgvector, toán tử `<=>`) | cosine embedding, lọc theo `VECTOR_MIN_SCORE` |
+| `vector` | Cosine giữa embedding truy vấn và embedding chunk (nhân ma trận trong RAM, xem dưới) | cosine embedding, lọc theo `VECTOR_MIN_SCORE` |
 | `hybrid` | Lấy `HYBRID_CANDIDATE_CHUNKS` chunk tốt nhất của mỗi luồng, gộp bằng **Reciprocal Rank Fusion**: `Σ 1/(RRF_K + hạng)` | điểm RRF chia cho điểm tối đa, nằm trong [0, 1] |
 
 - Truy vấn Boolean luôn dùng `tfidf` (vector không hiểu `NOT` và `"cụm từ"`).
@@ -78,9 +80,30 @@ Bước xếp hạng chunk có 3 chế độ. Mỗi request chọn qua `searchMo
 - Chunk đã có từ trước khi bật embedding: gọi `POST /api/embeddings/backfill` một lần.
 - Đổi model khác số chiều: sửa `EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`, đổi kiểu cột `embedding vector(N)` rồi gọi `POST /api/embeddings/backfill?force=true`.
 
+**Tìm kiếm vector trong RAM** (`app/vector_store.py`)
+
+Cột `embedding` trên DB là nguồn sự thật, nhưng **không tìm bằng `ORDER BY embedding <=> q` trên DB** vì bảng không có
+chỉ mục ANN: Postgres phải quét tuần tự cả bảng, ~30–35 s/lần với 51k chunk (đo 11/2026), quá thời gian chờ 30 s của
+frontend. Tạo HNSW thì tốn ~150–200 MB trong khi Supabase free chỉ có 500 MB và DB đã ~413 MB.
+
+Thay vào đó worker giữ toàn bộ vector (đã chuẩn hoá L2) trong RAM, cosine là một phép nhân ma trận (vài chục ms):
+- Khởi động: nạp `data/vectors/embeddings.npz` rồi đồng bộ với DB (chỉ tải chunk mới, bỏ chunk đã xoá/không còn hiện hành).
+  Lần đầu không có file đệm phải tải cả kho, ~1 phút; trong lúc đó `hybrid` tạm chỉ dùng TF-IDF, `vector` báo chưa sẵn sàng.
+- Sinh embedding mới (upload PDF, backfill): vector vừa tính được đưa thẳng vào RAM.
+- `POST /api/index/rebuild`: đồng bộ lại với DB.
+
+> **Lưu ý về sau**
+> - RAM tăng tuyến tính: số chunk × 768 × 4 byte (51k chunk ≈ 157 MB, cộng ~80 MB file đệm trên đĩa). Tới vài trăm nghìn
+>   chunk nên chuyển sang chỉ mục ANN: HNSW trên DB khi lên gói trả phí / có đủ dung lượng
+>   (`CREATE INDEX ON public.search_document_chunks USING hnsw (embedding vector_cosine_ops);`, rồi trả `embedder.search`
+>   về câu SQL `<=>`), hoặc faiss/hnswlib trong worker.
+> - Mỗi tiến trình worker giữ một bản sao: chạy nhiều worker (nhiều uvicorn worker / nhiều máy) thì RAM nhân lên.
+> - Ghi embedding vào DB bằng công cụ ngoài worker (vd `batch.import_results`, sửa tay trên DB) thì phải gọi
+>   `POST /api/index/rebuild` (import_results đã tự gọi) để RAM cập nhật; nếu không, chunk mới chỉ tìm được bằng TF-IDF.
+> - Xoá tài liệu ở Spring không báo sang worker: chunk cũ vẫn nằm trong RAM tới lần rebuild, nhưng không lộ ra ngoài vì
+>   searcher chỉ nhận chunk có trong mô hình TF-IDF và Spring lọc lại tài liệu đã xoá.
+
 **Hạn chế hiện tại**
-- **Chưa có index ANN (HNSW/IVFFlat) trên cột `embedding`**: tìm vector đang quét tuần tự toàn bảng. Kho lớn thì cần tạo, ví dụ:
-  `CREATE INDEX ON public.search_document_chunks USING hnsw (embedding vector_cosine_ops);`
 - `VECTOR_MIN_SCORE`, `HYBRID_CANDIDATE_CHUNKS`, `RRF_K` đang là giá trị tạm, chưa qua đánh giá trên dữ liệu thật.
 
 ## Ánh xạ với tài liệu

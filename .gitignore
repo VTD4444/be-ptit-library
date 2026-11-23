@@ -38,3 +38,6 @@ build/
 uploads/
 .agents/
 .venv/
+
+### Ghi chu ca nhan (khong commit) ###
+NOTES.local.md

@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import vn.edu.ptit.library.catalog.dto.DigitalCopyUploadResponse;
+import vn.edu.ptit.library.catalog.dto.DigitalProcessingItemDto;
+import vn.edu.ptit.library.catalog.dto.DigitalProcessingListResponse;
 import vn.edu.ptit.library.catalog.dto.ProcessingStatusResponse;
 import vn.edu.ptit.library.catalog.service.DigitalCopyService;
 import vn.edu.ptit.library.common.dto.ApiResponse;
@@ -52,6 +54,26 @@ public class DigitalCopyController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + documentId + ".pdf\"")
                 .cacheControl(CacheControl.noStore())
                 .body(resource);
+    }
+
+    @GetMapping("/api/admin/digital-copies")
+    @PreAuthorize("hasAnyRole('LIBRARIAN', 'ADMIN')")
+    @Operation(summary = "Danh sach ban so PDF kem tien trinh boc tach gan nhat va thong ke theo trang thai",
+            description = "status: PENDING, PROCESSING, INDEXED, LOW_QUALITY, FAILED (bo trong = tat ca); "
+                    + "keyword: nhan de hoac ten tep. Sap xep moi nhat truoc.")
+    public ApiResponse<DigitalProcessingListResponse> listDigitalCopies(
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "20") int size) {
+        return ApiResponse.success(digitalCopyService.listForProcessing(status, keyword, page, size));
+    }
+
+    @PostMapping("/api/admin/digital-copies/{id}/reprocess")
+    @PreAuthorize("hasAnyRole('LIBRARIAN', 'ADMIN')")
+    @Operation(summary = "Chay lai boc tach cho ban so dang loi hoac chat luong thap")
+    public ApiResponse<DigitalProcessingItemDto> reprocess(@PathVariable("id") UUID id) {
+        return ApiResponse.success("Da dua ban so vao hang doi xu ly lai", digitalCopyService.reprocess(id));
     }
 
     @GetMapping("/api/admin/digital-copies/processing-status")

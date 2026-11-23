@@ -14,6 +14,7 @@ import logging
 import math
 import shutil
 import threading
+import time
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
@@ -103,7 +104,16 @@ class TfidfIndex:
         (tmp / "inverted.json").write_text(json.dumps(self.inverted, ensure_ascii=False), encoding="utf-8")
         # Thay the nguyen thu muc de khong bao gio doc phai mo hinh ghi do dang
         shutil.rmtree(directory, ignore_errors=True)
-        tmp.rename(directory)
+        # Windows: thu muc vua xoa / file vua ghi co the con bi khoa tam thoi (antivirus, indexer) -> thu lai
+        for attempt in range(10):
+            try:
+                tmp.rename(directory)
+                return
+            except PermissionError:
+                if attempt == 9:
+                    raise
+                time.sleep(0.5 * (attempt + 1))
+                shutil.rmtree(directory, ignore_errors=True)
 
     @classmethod
     def load(cls, directory) -> "TfidfIndex":

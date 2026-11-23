@@ -9,19 +9,25 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import vn.edu.ptit.library.catalog.entity.Author;
 import vn.edu.ptit.library.catalog.entity.Document;
+import vn.edu.ptit.library.catalog.entity.DocumentAuthor;
 import vn.edu.ptit.library.catalog.entity.PhysicalCopy;
+import vn.edu.ptit.library.catalog.repository.DocumentAuthorRepository;
 import vn.edu.ptit.library.catalog.repository.DocumentRepository;
 import vn.edu.ptit.library.catalog.repository.PhysicalCopyRepository;
 import vn.edu.ptit.library.circulation.dto.BorrowRequestDto;
 import vn.edu.ptit.library.circulation.dto.BorrowResponseDto;
 import vn.edu.ptit.library.circulation.dto.BorrowedItemDto;
 import vn.edu.ptit.library.circulation.dto.CirculationHistoryItemDto;
+import vn.edu.ptit.library.circulation.dto.CopyLookupDto;
+import vn.edu.ptit.library.circulation.dto.StaffHoldItemDto;
 import vn.edu.ptit.library.circulation.dto.FineItemDto;
 import vn.edu.ptit.library.circulation.dto.FinePaymentResponseDto;
 import vn.edu.ptit.library.circulation.dto.HoldCancelResponseDto;
 import vn.edu.ptit.library.circulation.dto.HoldRequestDto;
 import vn.edu.ptit.library.circulation.dto.HoldResponseDto;
+import vn.edu.ptit.library.circulation.dto.MyHoldItemDto;
 import vn.edu.ptit.library.circulation.dto.RenewRequestDto;
 import vn.edu.ptit.library.circulation.dto.RenewResponseDto;
 import vn.edu.ptit.library.circulation.dto.ReturnRequestDto;
@@ -78,6 +84,7 @@ public class CirculationServiceImpl implements CirculationService {
     private final HoldQueueRepository holdQueueRepository;
     private final CirculationFineRepository circulationFineRepository;
     private final PenaltyTypeRepository penaltyTypeRepository;
+    private final DocumentAuthorRepository documentAuthorRepository;
 
     @Override
     @Transactional
@@ -604,25 +611,7 @@ public class CirculationServiceImpl implements CirculationService {
         if (HoldStatus.WAITING.name().equalsIgnoreCase(currentStatus) && oldPosition != null) {
             holdQueueRepository.decrementQueuePositionsAfter(document.getId(), oldPosition);
         } else if (HoldStatus.READY_FOR_PICKUP.name().equalsIgnoreCase(currentStatus) && reservedCopy != null) {
-            Optional<HoldQueue> nextWaitingOpt = holdQueueRepository
-                    .findFirstByDocumentIdAndStatusOrderByQueuePositionAsc(document.getId(), HoldStatus.WAITING.name());
-
-            if (nextWaitingOpt.isPresent()) {
-                HoldQueue nextWaiting = nextWaitingOpt.get();
-                Integer nextPos = nextWaiting.getQueuePosition();
-                nextWaiting.setStatus(HoldStatus.READY_FOR_PICKUP.name());
-                nextWaiting.setPhysicalCopy(reservedCopy);
-                nextWaiting.setReadyDate(now);
-                nextWaiting.setPickupDeadline(now.plusDays(DEFAULT_HOLD_EXPIRY_DAYS));
-                holdQueueRepository.save(nextWaiting);
-
-                if (nextPos != null) {
-                    holdQueueRepository.decrementQueuePositionsAfter(document.getId(), nextPos);
-                }
-            } else {
-                reservedCopy.setStatus(PhysicalCopyStatus.AVAILABLE.name());
-                physicalCopyRepository.save(reservedCopy);
-            }
+            passReservedCopyToNext(reservedCopy, document, now);
         }
 
         return HoldCancelResponseDto.builder()
@@ -632,6 +621,209 @@ public class CirculationServiceImpl implements CirculationService {
                 .status(HoldStatus.CANCELLED.name())
                 .cancelReason(hold.getCancelReason())
                 .cancelledAt(now)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MyHoldItemDto> getMyHolds(String status) {
+        UUID currentUserId = SecurityUtils.getCurrentUserIdOrThrow();
+        String filter = StringUtils.hasText(status) ? status.trim().toUpperCase() : null;
+        OffsetDateTime now = OffsetDateTime.now();
+
+        return holdQueueRepository.findAllByUserIdWithDetails(currentUserId).stream()
+                .filter(h -> filter == null
+                        || ("ACTIVE".equals(filter) && isActiveHold(h.getStatus()))
+                        || filter.equalsIgnoreCase(h.getStatus()))
+                .map(h -> {
+                    Document doc = h.getDocument();
+                    PhysicalCopy copy = h.getPhysicalCopy();
+                    boolean waiting = HoldStatus.WAITING.name().equalsIgnoreCase(h.getStatus());
+                    boolean ready = HoldStatus.READY_FOR_PICKUP.name().equalsIgnoreCase(h.getStatus());
+                    return MyHoldItemDto.builder()
+                            .holdId(h.getId())
+                            .documentId(doc.getId())
+                            .documentTitle(doc.getTitle())
+                            .docType(doc.getDocType())
+                            .publicationYear(doc.getPublicationYear())
+                            .coverUrl(doc.getCoverUrl())
+                            .status(h.getStatus())
+                            .queuePosition(waiting ? h.getQueuePosition() : null)
+                            .requestDate(h.getRequestDate())
+                            .estimatedAvailableDate(waiting && h.getQueuePosition() != null
+                                    ? calculateEstimatedAvailableDate(doc.getId(), h.getQueuePosition(), now)
+                                    : null)
+                            .readyDate(h.getReadyDate())
+                            .pickupDeadline(h.getPickupDeadline())
+                            .barcode(ready && copy != null ? copy.getBarcode() : null)
+                            .callNumber(ready && copy != null ? copy.getCallNumber() : null)
+                            .shelfLocation(ready && copy != null ? copy.getShelfLocation() : null)
+                            .cancelReason(h.getCancelReason())
+                            .build();
+                })
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public int expireOverduePickups() {
+        OffsetDateTime now = OffsetDateTime.now();
+        List<HoldQueue> expired = holdQueueRepository.findReadyHoldsPastPickupDeadline(now);
+        for (HoldQueue hold : expired) {
+            PhysicalCopy reservedCopy = hold.getPhysicalCopy();
+            hold.setStatus(HoldStatus.EXPIRED.name());
+            hold.setCancelReason("Quá hạn nhận sách đặt trước");
+            holdQueueRepository.save(hold);
+
+            // Chi nhuong ban sach khi no van dang duoc giu (thu thu co the da doi trang thai thu cong)
+            if (reservedCopy != null
+                    && PhysicalCopyStatus.RESERVED.name().equalsIgnoreCase(reservedCopy.getStatus())) {
+                passReservedCopyToNext(reservedCopy, hold.getDocument(), now);
+            }
+            log.info("Hold {} het han nhan sach (han {}), ban sao {}",
+                    hold.getId(), hold.getPickupDeadline(), reservedCopy != null ? reservedCopy.getBarcode() : null);
+        }
+        return expired.size();
+    }
+
+    /**
+     * Ban sach dang giu (RESERVED) duoc giai phong: giu tiep cho nguoi dau hang cho, hoac tra ve ke (AVAILABLE).
+     */
+    private void passReservedCopyToNext(PhysicalCopy reservedCopy, Document document, OffsetDateTime now) {
+        Optional<HoldQueue> nextWaitingOpt = holdQueueRepository
+                .findFirstByDocumentIdAndStatusOrderByQueuePositionAsc(document.getId(), HoldStatus.WAITING.name());
+
+        if (nextWaitingOpt.isPresent()) {
+            HoldQueue nextWaiting = nextWaitingOpt.get();
+            Integer nextPos = nextWaiting.getQueuePosition();
+            nextWaiting.setStatus(HoldStatus.READY_FOR_PICKUP.name());
+            nextWaiting.setPhysicalCopy(reservedCopy);
+            nextWaiting.setReadyDate(now);
+            nextWaiting.setPickupDeadline(now.plusDays(DEFAULT_HOLD_EXPIRY_DAYS));
+            holdQueueRepository.save(nextWaiting);
+
+            if (nextPos != null) {
+                holdQueueRepository.decrementQueuePositionsAfter(document.getId(), nextPos);
+            }
+        } else {
+            reservedCopy.setStatus(PhysicalCopyStatus.AVAILABLE.name());
+            physicalCopyRepository.save(reservedCopy);
+        }
+    }
+
+    private static boolean isActiveHold(String status) {
+        return HoldStatus.WAITING.name().equalsIgnoreCase(status)
+                || HoldStatus.READY_FOR_PICKUP.name().equalsIgnoreCase(status);
+    }
+
+    private static final int STAFF_HOLD_LIMIT = 500;
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<StaffHoldItemDto> searchHoldsForStaff(String status, String keyword) {
+        String filter = StringUtils.hasText(status) ? status.trim().toUpperCase() : "ACTIVE";
+        List<String> statuses;
+        if ("ACTIVE".equals(filter)) {
+            statuses = List.of(HoldStatus.WAITING.name(), HoldStatus.READY_FOR_PICKUP.name());
+        } else {
+            try {
+                statuses = List.of(HoldStatus.valueOf(filter).name());
+            } catch (IllegalArgumentException ex) {
+                throw new AppException(ErrorCode.INVALID_REQUEST, "Trạng thái đặt trước không hợp lệ: " + status);
+            }
+        }
+        String pattern = "%" + (StringUtils.hasText(keyword) ? keyword.trim().toLowerCase() : "") + "%";
+
+        return holdQueueRepository.searchForStaff(statuses, pattern, PageRequest.of(0, STAFF_HOLD_LIMIT)).stream()
+                .map(h -> {
+                    Document doc = h.getDocument();
+                    User u = h.getUser();
+                    PhysicalCopy copy = h.getPhysicalCopy();
+                    boolean ready = HoldStatus.READY_FOR_PICKUP.name().equalsIgnoreCase(h.getStatus());
+                    return StaffHoldItemDto.builder()
+                            .holdId(h.getId())
+                            .status(h.getStatus())
+                            .queuePosition(HoldStatus.WAITING.name().equalsIgnoreCase(h.getStatus()) ? h.getQueuePosition() : null)
+                            .requestDate(h.getRequestDate())
+                            .readyDate(h.getReadyDate())
+                            .pickupDeadline(h.getPickupDeadline())
+                            .cancelReason(h.getCancelReason())
+                            .documentId(doc.getId())
+                            .documentTitle(doc.getTitle())
+                            .docType(doc.getDocType())
+                            .publicationYear(doc.getPublicationYear())
+                            .userId(u.getId())
+                            .userCode(u.getUserCode())
+                            .fullName(u.getFullName())
+                            .email(u.getEmail())
+                            .phone(u.getPhone())
+                            .barcode(ready && copy != null ? copy.getBarcode() : null)
+                            .shelfLocation(ready && copy != null ? copy.getShelfLocation() : null)
+                            .build();
+                })
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CopyLookupDto lookupCopy(String barcode) {
+        String code = barcode == null ? "" : barcode.trim();
+        PhysicalCopy copy = physicalCopyRepository.findByBarcode(code)
+                .orElseThrow(() -> new AppException(ErrorCode.PHYSICAL_COPY_NOT_FOUND,
+                        "Không tìm thấy cuốn sách với mã vạch: " + code));
+        Document doc = copy.getDocument();
+        OffsetDateTime now = OffsetDateTime.now();
+
+        CopyLookupDto.ActiveLoan activeLoan = circulationRepository.findByPhysicalCopyIdAndReturnDateIsNull(copy.getId())
+                .map(c -> {
+                    long overdueDays = 0;
+                    if (c.getDueDate() != null && now.isAfter(c.getDueDate())) {
+                        overdueDays = Math.max(1, ChronoUnit.DAYS.between(c.getDueDate().toLocalDate(), now.toLocalDate()));
+                    }
+                    PenaltyType overdue = penaltyTypeRepository.findByCode("OVERDUE").orElse(null);
+                    long unitPrice = overdue != null && overdue.getUnitPrice() != null ? overdue.getUnitPrice() : 5000L;
+                    return CopyLookupDto.ActiveLoan.builder()
+                            .circulationId(c.getId())
+                            .userCode(c.getUser().getUserCode())
+                            .fullName(c.getUser().getFullName())
+                            .borrowDate(c.getBorrowDate())
+                            .dueDate(c.getDueDate())
+                            .renewalsCount(c.getRenewalsCount() != null ? c.getRenewalsCount() : 0)
+                            .overdueDays(overdueDays)
+                            .estimatedOverdueFine(overdueDays * unitPrice)
+                            .build();
+                })
+                .orElse(null);
+
+        CopyLookupDto.ReservedHold reservedFor = holdQueueRepository
+                .findByPhysicalCopyIdAndStatus(copy.getId(), HoldStatus.READY_FOR_PICKUP.name())
+                .map(h -> CopyLookupDto.ReservedHold.builder()
+                        .holdId(h.getId())
+                        .userCode(h.getUser().getUserCode())
+                        .fullName(h.getUser().getFullName())
+                        .pickupDeadline(h.getPickupDeadline())
+                        .build())
+                .orElse(null);
+
+        List<String> authors = documentAuthorRepository.findByDocumentIdOrderByAuthorOrderAsc(doc.getId()).stream()
+                .map(DocumentAuthor::getAuthor)
+                .filter(a -> a != null && a.getName() != null)
+                .map(Author::getName)
+                .toList();
+
+        return CopyLookupDto.builder()
+                .copyId(copy.getId())
+                .barcode(copy.getBarcode())
+                .callNumber(copy.getCallNumber())
+                .shelfLocation(copy.getShelfLocation())
+                .status(copy.getStatus())
+                .documentId(doc.getId())
+                .documentTitle(doc.getTitle())
+                .authors(authors)
+                .docType(doc.getDocType())
+                .publicationYear(doc.getPublicationYear())
+                .activeLoan(activeLoan)
+                .reservedFor(reservedFor)
                 .build();
     }
 
