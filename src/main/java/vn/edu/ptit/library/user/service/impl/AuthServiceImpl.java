@@ -11,7 +11,11 @@ import vn.edu.ptit.library.common.exception.AppException;
 import vn.edu.ptit.library.common.exception.ErrorCode;
 import vn.edu.ptit.library.common.util.SecurityUtils;
 import vn.edu.ptit.library.security.JwtTokenProvider;
+import vn.edu.ptit.library.security.MicrosoftAuthProperties;
+import vn.edu.ptit.library.security.MicrosoftTokenVerifier;
+import vn.edu.ptit.library.security.MicrosoftUserClaims;
 import vn.edu.ptit.library.user.dto.LoginRequest;
+import vn.edu.ptit.library.user.dto.MicrosoftLoginRequest;
 import vn.edu.ptit.library.user.dto.RegisterRequest;
 import vn.edu.ptit.library.user.dto.TokenResponse;
 import vn.edu.ptit.library.user.dto.UserDto;
@@ -22,8 +26,10 @@ import vn.edu.ptit.library.user.repository.DepartmentRepository;
 import vn.edu.ptit.library.user.repository.UserProfileRepository;
 import vn.edu.ptit.library.user.repository.UserRepository;
 import vn.edu.ptit.library.user.service.AuthService;
+import vn.edu.ptit.library.user.util.PtitEmailParser;
 
 import java.time.OffsetDateTime;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -35,6 +41,8 @@ public class AuthServiceImpl implements AuthService {
     private final DepartmentRepository departmentRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
+    private final MicrosoftTokenVerifier microsoftTokenVerifier;
+    private final MicrosoftAuthProperties microsoftAuthProperties;
 
     @Override
     @Transactional(readOnly = true)
@@ -42,22 +50,34 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findByEmailOrUserCode(request.getUsername(), request.getUsername())
                 .orElseThrow(() -> new AppException(ErrorCode.INVALID_CREDENTIALS));
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+        if (!StringUtils.hasText(user.getPasswordHash())
+                || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw new AppException(ErrorCode.INVALID_CREDENTIALS);
         }
 
-        String accessToken = tokenProvider.generateAccessToken(
-                user.getId(), user.getEmail(), user.getUserCode(), user.getRole()
-        );
-        String refreshToken = tokenProvider.generateRefreshToken(user.getId());
+        assertAccountActive(user);
 
-        return TokenResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .tokenType("Bearer")
-                .expiresIn(86400)
-                .user(toDto(user))
-                .build();
+        return issueTokenResponse(user);
+    }
+
+    @Override
+    @Transactional
+    public TokenResponse loginWithMicrosoft(MicrosoftLoginRequest request) {
+        MicrosoftUserClaims claims = microsoftTokenVerifier.verifyIdToken(request.getIdToken());
+        String email = claims.email().trim().toLowerCase(Locale.ROOT);
+
+        User user = userRepository.findByEmailIgnoreCase(email)
+                .map(existing -> {
+                    assertAccountActive(existing);
+                    if (!StringUtils.hasText(existing.getFullName()) && StringUtils.hasText(claims.fullName())) {
+                        existing.setFullName(claims.fullName().trim());
+                        return userRepository.save(existing);
+                    }
+                    return existing;
+                })
+                .orElseGet(() -> provisionMicrosoftUser(claims, email));
+
+        return issueTokenResponse(user);
     }
 
     @Override
@@ -130,18 +150,9 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
-        String newAccessToken = tokenProvider.generateAccessToken(
-                user.getId(), user.getEmail(), user.getUserCode(), user.getRole()
-        );
-        String newRefreshToken = tokenProvider.generateRefreshToken(user.getId());
+        assertAccountActive(user);
 
-        return TokenResponse.builder()
-                .accessToken(newAccessToken)
-                .refreshToken(newRefreshToken)
-                .tokenType("Bearer")
-                .expiresIn(86400)
-                .user(toDto(user))
-                .build();
+        return issueTokenResponse(user);
     }
 
     @Override
@@ -151,6 +162,76 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findById(currentUserId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
         return toDto(user);
+    }
+
+    private User provisionMicrosoftUser(MicrosoftUserClaims claims, String email) {
+        if (!microsoftAuthProperties.isAutoProvision()) {
+            throw new AppException(ErrorCode.USER_NOT_FOUND,
+                    "Tài khoản Microsoft chưa được đăng ký trong hệ thống thư viện. Vui lòng liên hệ nhân viên thư viện.");
+        }
+
+        PtitEmailParser.ParsedPtitEmail parsed = PtitEmailParser.parse(email);
+        String userCode = generateUniqueUserCode(parsed.userCode());
+        String fullName = StringUtils.hasText(claims.fullName()) ? claims.fullName().trim() : userCode;
+
+        User newUser = User.builder()
+                .userCode(userCode)
+                .fullName(fullName)
+                .email(email)
+                .passwordHash(null)
+                .role(UserRole.READER.name())
+                .userType(parsed.userType())
+                .enrollmentYear(parsed.enrollmentYear())
+                .status(UserStatus.ACTIVE.name())
+                .cardExpiry(OffsetDateTime.now().plusYears(4))
+                .build();
+
+        User savedUser = userRepository.save(newUser);
+
+        UserProfile profile = UserProfile.builder()
+                .id(savedUser.getId())
+                .user(savedUser)
+                .personalizationEnabled(true)
+                .build();
+        userProfileRepository.save(profile);
+
+        return savedUser;
+    }
+
+    private String generateUniqueUserCode(String baseCode) {
+        String candidate = baseCode;
+        int suffix = 1;
+        while (userRepository.existsByUserCodeIgnoreCase(candidate)) {
+            candidate = baseCode + "_" + suffix;
+            suffix++;
+        }
+        return candidate;
+    }
+
+    private void assertAccountActive(User user) {
+        if (UserStatus.LOCKED.name().equalsIgnoreCase(user.getStatus())
+                || UserStatus.INACTIVE.name().equalsIgnoreCase(user.getStatus())) {
+            String reason = StringUtils.hasText(user.getLockReason())
+                    ? " Lý do: " + user.getLockReason().trim()
+                    : "";
+            throw new AppException(ErrorCode.FORBIDDEN,
+                    "Tài khoản hiện đang bị khóa hoặc ngừng hoạt động." + reason);
+        }
+    }
+
+    private TokenResponse issueTokenResponse(User user) {
+        String accessToken = tokenProvider.generateAccessToken(
+                user.getId(), user.getEmail(), user.getUserCode(), user.getRole()
+        );
+        String refreshToken = tokenProvider.generateRefreshToken(user.getId());
+
+        return TokenResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .tokenType("Bearer")
+                .expiresIn(86400)
+                .user(toDto(user))
+                .build();
     }
 
     private UserDto toDto(User user) {

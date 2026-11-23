@@ -57,6 +57,13 @@ app:
     secret: ${JWT_SECRET:cHRpdC1zbWFydC1saWJyYXJ5LXNlY3JldC1rZXktMjAyNi12ZXJ5LWxvbmctYW5kLXNlY3VyZS1rZXk=}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
     refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000}
+  microsoft:
+    enabled: ${MICROSOFT_AUTH_ENABLED:true}
+    client-id: ${MICROSOFT_CLIENT_ID:}
+    jwk-set-uri: ${MICROSOFT_JWK_SET_URI:https://login.microsoftonline.com/common/discovery/v2.0/keys}
+    allowed-tenant-ids: ${MICROSOFT_ALLOWED_TENANT_IDS:}
+    allowed-domains: ${MICROSOFT_ALLOWED_DOMAINS:stu.ptit.edu.vn,ptit.edu.vn}
+    auto-provision: ${MICROSOFT_AUTO_PROVISION:true}
   python-worker:
     base-url: ${PYTHON_WORKER_BASE_URL:http://localhost:8000}
     timeout-seconds: ${PYTHON_WORKER_TIMEOUT_SECONDS:30}

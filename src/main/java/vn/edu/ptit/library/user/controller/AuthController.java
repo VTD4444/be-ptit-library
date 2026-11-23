@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import vn.edu.ptit.library.common.dto.ApiResponse;
 import vn.edu.ptit.library.user.dto.LoginRequest;
+import vn.edu.ptit.library.user.dto.MicrosoftLoginRequest;
 import vn.edu.ptit.library.user.dto.RegisterRequest;
 import vn.edu.ptit.library.user.dto.TokenResponse;
 import vn.edu.ptit.library.user.dto.UserDto;
@@ -35,6 +36,15 @@ public class AuthController {
     @Operation(summary = "Dang nhap bang email hoac ma ban doc")
     public ApiResponse<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
         return ApiResponse.success("Dang nhap thanh cong", authService.login(request));
+    }
+
+    @PostMapping("/microsoft")
+    @Operation(summary = "Dang nhap bang tai khoan Microsoft (OIDC id_token)")
+    public ApiResponse<TokenResponse> loginWithMicrosoft(@Valid @RequestBody MicrosoftLoginRequest request) {
+        return ApiResponse.success(
+                "Dang nhap bang tai khoan Microsoft thanh cong",
+                authService.loginWithMicrosoft(request)
+        );
     }
 
     @PostMapping("/refresh")

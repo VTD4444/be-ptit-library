@@ -13,6 +13,8 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
 
     Optional<User> findByEmail(String email);
 
+    Optional<User> findByEmailIgnoreCase(String email);
+
     Optional<User> findByUserCode(String userCode);
 
     Optional<User> findByEmailOrUserCode(String email, String userCode);
@@ -20,6 +22,8 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     boolean existsByEmail(String email);
 
     boolean existsByUserCode(String userCode);
+
+    boolean existsByUserCodeIgnoreCase(String userCode);
 
     long countByStatus(String status);
 }
