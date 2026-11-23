@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import vn.edu.ptit.library.indexing.entity.BackgroundJob;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,6 +18,8 @@ public interface BackgroundJobRepository extends JpaRepository<BackgroundJob, Lo
     Page<BackgroundJob> findByStatus(String status, Pageable pageable);
 
     List<BackgroundJob> findByTargetId(UUID targetId);
+
+    List<BackgroundJob> findByJobTypeAndTargetIdIn(String jobType, Collection<UUID> targetIds);
 
     long countByStatus(String status);
 }

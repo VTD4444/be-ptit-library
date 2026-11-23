@@ -1,0 +1,48 @@
+{"id": "A01", "group": "A", "query": "Pasteur"}
+{"id": "A02", "group": "A", "query": "WannaCry"}
+{"id": "A03", "group": "A", "query": "SWOT"}
+{"id": "A04", "group": "A", "query": "Diffie-Hellman"}
+{"id": "A05", "group": "A", "query": "TSMC"}
+{"id": "A06", "group": "A", "query": "Satoshi Nakamoto"}
+{"id": "A07", "group": "A", "query": "Boeing 787 Dreamliner"}
+{"id": "A08", "group": "A", "query": "Howard Schultz"}
+{"id": "B01", "group": "B", "query": "mã hóa khóa công khai RSA"}
+{"id": "B02", "group": "B", "query": "tấn công SQL injection"}
+{"id": "B03", "group": "B", "query": "thuật toán lập lịch tiến trình round robin"}
+{"id": "B04", "group": "B", "query": "bảng cân đối kế toán"}
+{"id": "B05", "group": "B", "query": "hồi quy tuyến tính bội phương pháp bình phương nhỏ nhất"}
+{"id": "B06", "group": "B", "query": "độ co giãn của cầu theo giá"}
+{"id": "B07", "group": "B", "query": "thư tín dụng L/C"}
+{"id": "B08", "group": "B", "query": "hàm truyền đạt hệ thống điều khiển tự động"}
+{"id": "C01", "group": "C", "query": "làm sao để giữ chân khách hàng cũ quay lại mua hàng"}
+{"id": "C02", "group": "C", "query": "vì sao lạm phát làm giảm sức mua của người dân"}
+{"id": "C03", "group": "C", "query": "làm thế nào để bảo vệ website khỏi bị hacker chèn mã độc"}
+{"id": "C04", "group": "C", "query": "cách tính khấu hao tài sản cố định"}
+{"id": "C05", "group": "C", "query": "nguyên nhân khiến nhiều loài sinh vật bị tuyệt chủng hàng loạt"}
+{"id": "C06", "group": "C", "query": "làm sao để quản lý chi tiêu cá nhân và tiết kiệm tiền hiệu quả"}
+{"id": "C07", "group": "C", "query": "thuốc trừ sâu ảnh hưởng thế nào đến chim và môi trường"}
+{"id": "C08", "group": "C", "query": "cây cối trong rừng giao tiếp với nhau như thế nào"}
+{"id": "D01", "group": "D", "query": "customer relationship management"}
+{"id": "D02", "group": "D", "query": "public key cryptography"}
+{"id": "D03", "group": "D", "query": "supply chain management"}
+{"id": "D04", "group": "D", "query": "monetary policy and inflation control"}
+{"id": "D05", "group": "D", "query": "stem cell therapy"}
+{"id": "D06", "group": "D", "query": "operating system deadlock prevention"}
+{"id": "D07", "group": "D", "query": "neural network backpropagation training"}
+{"id": "D08", "group": "D", "query": "search engine optimization"}
+{"id": "E01", "group": "E", "query": "Khi giá cả hàng hóa tăng liên tục trong thời gian dài, ngân hàng trung ương thường nâng lãi suất và thắt chặt cung tiền để kéo lạm phát xuống. Tuy nhiên, chính sách này có thể làm chậm tăng trưởng, khiến doanh nghiệp khó vay vốn và thất nghiệp gia tăng. Vậy cần cân bằng giữa ổn định giá và tăng trưởng kinh tế như thế nào?"}
+{"id": "E02", "group": "E", "query": "Một sổ cái phân tán được nhiều máy tính trong mạng cùng lưu giữ, mỗi khối giao dịch được liên kết với khối trước bằng mã băm nên rất khó sửa đổi. Nhờ cơ chế đồng thuận, các bên không cần tin tưởng một trung gian như ngân hàng mà vẫn chuyển giá trị cho nhau được."}
+{"id": "E03", "group": "E", "query": "Hai tiến trình cùng giữ một tài nguyên và chờ tài nguyên mà tiến trình kia đang giữ, kết quả là cả hai bị treo mãi mãi. Hệ điều hành có thể phòng tránh tình trạng này bằng cách cấp phát tài nguyên theo thứ tự, hoặc phát hiện rồi thu hồi tài nguyên."}
+{"id": "E04", "group": "E", "query": "Giá trị của một thương hiệu không chỉ nằm ở logo hay tên gọi mà ở nhận thức, sự trung thành và liên tưởng mà khách hàng gắn với nó. Doanh nghiệp cần định vị rõ ràng, truyền thông nhất quán và bảo vệ thương hiệu trước các rủi ro để tạo ra tài sản thương hiệu bền vững."}
+{"id": "E05", "group": "E", "query": "Kẻ tấn công gửi email giả mạo ngân hàng, dụ người dùng bấm vào đường link và nhập mật khẩu trên một trang web trông giống hệt trang thật. Đây là hình thức lừa đảo khai thác yếu tố con người, nên ngoài giải pháp kỹ thuật, tổ chức cần đào tạo nhận thức an toàn thông tin cho nhân viên."}
+{"id": "E06", "group": "E", "query": "Mô hình học từ dữ liệu đã gán nhãn, mỗi điểm dữ liệu gồm đặc trưng đầu vào và nhãn đầu ra. Thuật toán tìm tham số sao cho hàm mất mát nhỏ nhất, thường bằng gradient descent, và cần tránh quá khớp bằng cách điều chuẩn hoặc kiểm tra chéo."}
+{"id": "E07", "group": "E", "query": "Hiến pháp quy định quyền lực nhà nước được phân chia thành lập pháp, hành pháp và tư pháp, các nhánh kiểm soát và cân bằng lẫn nhau để tránh lạm quyền, đồng thời bảo đảm các quyền cơ bản của công dân."}
+{"id": "E08", "group": "E", "query": "Trước khi quyết định bỏ vốn, nhà đầu tư cần ước tính dòng tiền của dự án qua từng năm, chiết khấu về hiện tại để tính giá trị hiện tại ròng và tỷ suất hoàn vốn nội bộ, rồi so sánh với chi phí vốn để xem dự án có đáng làm hay không."}
+{"id": "F01", "group": "F", "query": "Heartbleed"}
+{"id": "F02", "group": "F", "query": "cách nấu phở bò Hà Nội"}
+{"id": "F03", "group": "F", "query": "luật chơi cờ vây"}
+{"id": "F04", "group": "F", "query": "World Cup 2022 Qatar"}
+{"id": "F05", "group": "F", "query": "Kubernetes pod autoscaling"}
+{"id": "F06", "group": "F", "query": "triệu chứng bệnh sốt xuất huyết ở trẻ em"}
+{"id": "F07", "group": "F", "query": "kỹ thuật bơi bướm"}
+{"id": "F08", "group": "F", "query": "hướng dẫn trồng hoa lan hồ điệp"}

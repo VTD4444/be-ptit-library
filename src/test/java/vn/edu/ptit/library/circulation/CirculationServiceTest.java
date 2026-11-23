@@ -73,6 +73,8 @@ class CirculationServiceTest {
     private CirculationFineRepository circulationFineRepository;
     @Mock
     private PenaltyTypeRepository penaltyTypeRepository;
+    @Mock
+    private vn.edu.ptit.library.catalog.repository.DocumentAuthorRepository documentAuthorRepository;
 
     @InjectMocks
     private CirculationServiceImpl circulationService;
@@ -345,5 +347,133 @@ class CirculationServiceTest {
         assertEquals(FineStatus.PAID.name(), response.getStatus());
         assertEquals(15000L, response.getFineAmount());
         assertTrue(response.getNote().contains("Thu tien mat tai quay"));
+    }
+
+    private void loginAsReader() {
+        CustomUserDetails readerDetails = CustomUserDetails.builder()
+                .id(reader.getId())
+                .userCode(reader.getUserCode())
+                .email(reader.getEmail())
+                .password("hashed_pwd")
+                .role(reader.getRole())
+                .status(reader.getStatus())
+                .build();
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(readerDetails, null, readerDetails.getAuthorities())
+        );
+    }
+
+    @Test
+    void getMyHolds_shouldMapReadyAndWaitingHoldsAndFilterActive() {
+        loginAsReader();
+        copy1.setStatus(PhysicalCopyStatus.RESERVED.name());
+        copy1.setShelfLocation("Kho A - Ke 3");
+        OffsetDateTime deadline = OffsetDateTime.now().plusDays(2);
+        HoldQueue ready = HoldQueue.builder().id(1L).user(reader).document(document).physicalCopy(copy1)
+                .status(HoldStatus.READY_FOR_PICKUP.name()).readyDate(OffsetDateTime.now()).pickupDeadline(deadline).build();
+        HoldQueue waiting = HoldQueue.builder().id(2L).user(reader).document(document)
+                .status(HoldStatus.WAITING.name()).queuePosition(2).requestDate(OffsetDateTime.now()).build();
+        HoldQueue cancelled = HoldQueue.builder().id(3L).user(reader).document(document)
+                .status(HoldStatus.CANCELLED.name()).cancelReason("Huy").build();
+
+        when(holdQueueRepository.findAllByUserIdWithDetails(reader.getId()))
+                .thenReturn(List.of(ready, waiting, cancelled));
+        when(circulationRepository.findActiveLoansByDocumentIdOrderByDueDateAsc(document.getId()))
+                .thenReturn(Collections.emptyList());
+
+        var all = circulationService.getMyHolds(null);
+        assertEquals(3, all.size());
+
+        var active = circulationService.getMyHolds("active");
+        assertEquals(2, active.size());
+        var readyDto = active.get(0);
+        assertEquals("893524480001", readyDto.getBarcode());
+        assertEquals("Kho A - Ke 3", readyDto.getShelfLocation());
+        assertEquals(deadline, readyDto.getPickupDeadline());
+        assertEquals(null, readyDto.getQueuePosition());
+        var waitingDto = active.get(1);
+        assertEquals(2, waitingDto.getQueuePosition());
+        assertNotNull(waitingDto.getEstimatedAvailableDate());
+        assertEquals(null, waitingDto.getBarcode());
+
+        assertEquals(1, circulationService.getMyHolds("CANCELLED").size());
+    }
+
+    @Test
+    void expireOverduePickups_shouldExpireHoldAndPassCopyToNextWaiting() {
+        copy1.setStatus(PhysicalCopyStatus.RESERVED.name());
+        HoldQueue overdue = HoldQueue.builder().id(10L).user(reader).document(document).physicalCopy(copy1)
+                .status(HoldStatus.READY_FOR_PICKUP.name()).pickupDeadline(OffsetDateTime.now().minusHours(1)).build();
+        HoldQueue next = HoldQueue.builder().id(11L).user(librarian).document(document)
+                .status(HoldStatus.WAITING.name()).queuePosition(1).build();
+
+        when(holdQueueRepository.findReadyHoldsPastPickupDeadline(any(OffsetDateTime.class))).thenReturn(List.of(overdue));
+        when(holdQueueRepository.findFirstByDocumentIdAndStatusOrderByQueuePositionAsc(document.getId(), HoldStatus.WAITING.name()))
+                .thenReturn(Optional.of(next));
+
+        assertEquals(1, circulationService.expireOverduePickups());
+
+        assertEquals(HoldStatus.EXPIRED.name(), overdue.getStatus());
+        assertEquals(HoldStatus.READY_FOR_PICKUP.name(), next.getStatus());
+        assertEquals(copy1, next.getPhysicalCopy());
+        assertNotNull(next.getPickupDeadline());
+        assertEquals(PhysicalCopyStatus.RESERVED.name(), copy1.getStatus());
+    }
+
+    @Test
+    void lookupCopy_shouldReturnOverdueLoanWithEstimatedFine() {
+        copy1.setStatus(PhysicalCopyStatus.BORROWED.name());
+        Circulation loan = Circulation.builder().id(400L).user(reader).physicalCopy(copy1)
+                .borrowDate(OffsetDateTime.now().minusDays(20)).dueDate(OffsetDateTime.now().minusDays(4)).renewalsCount(1).build();
+        PenaltyType overdue = PenaltyType.builder().id(1L).code("OVERDUE").unitPrice(5000L).build();
+
+        when(physicalCopyRepository.findByBarcode("893524480001")).thenReturn(Optional.of(copy1));
+        when(circulationRepository.findByPhysicalCopyIdAndReturnDateIsNull(copy1.getId())).thenReturn(Optional.of(loan));
+        when(penaltyTypeRepository.findByCode("OVERDUE")).thenReturn(Optional.of(overdue));
+        when(holdQueueRepository.findByPhysicalCopyIdAndStatus(copy1.getId(), HoldStatus.READY_FOR_PICKUP.name()))
+                .thenReturn(Optional.empty());
+        when(documentAuthorRepository.findByDocumentIdOrderByAuthorOrderAsc(document.getId())).thenReturn(Collections.emptyList());
+
+        var dto = circulationService.lookupCopy(" 893524480001 ");
+
+        assertEquals(document.getTitle(), dto.getDocumentTitle());
+        assertEquals(PhysicalCopyStatus.BORROWED.name(), dto.getStatus());
+        assertNotNull(dto.getActiveLoan());
+        assertEquals("B21DCCN001", dto.getActiveLoan().getUserCode());
+        assertEquals(4L, dto.getActiveLoan().getOverdueDays());
+        assertEquals(20000L, dto.getActiveLoan().getEstimatedOverdueFine());
+        assertEquals(null, dto.getReservedFor());
+    }
+
+    @Test
+    void searchHoldsForStaff_shouldDefaultToActiveAndExposeReader() {
+        HoldQueue waiting = HoldQueue.builder().id(21L).user(reader).document(document)
+                .status(HoldStatus.WAITING.name()).queuePosition(1).build();
+        when(holdQueueRepository.searchForStaff(any(), any(), any())).thenReturn(List.of(waiting));
+
+        var items = circulationService.searchHoldsForStaff(null, "  Nguyen ");
+
+        assertEquals(1, items.size());
+        assertEquals("B21DCCN001", items.get(0).getUserCode());
+        assertEquals(1, items.get(0).getQueuePosition());
+        org.mockito.Mockito.verify(holdQueueRepository).searchForStaff(
+                List.of(HoldStatus.WAITING.name(), HoldStatus.READY_FOR_PICKUP.name()), "%nguyen%",
+                org.springframework.data.domain.PageRequest.of(0, 500));
+    }
+
+    @Test
+    void expireOverduePickups_withoutWaitingReaders_shouldReturnCopyToShelf() {
+        copy1.setStatus(PhysicalCopyStatus.RESERVED.name());
+        HoldQueue overdue = HoldQueue.builder().id(12L).user(reader).document(document).physicalCopy(copy1)
+                .status(HoldStatus.READY_FOR_PICKUP.name()).pickupDeadline(OffsetDateTime.now().minusDays(1)).build();
+
+        when(holdQueueRepository.findReadyHoldsPastPickupDeadline(any(OffsetDateTime.class))).thenReturn(List.of(overdue));
+        when(holdQueueRepository.findFirstByDocumentIdAndStatusOrderByQueuePositionAsc(document.getId(), HoldStatus.WAITING.name()))
+                .thenReturn(Optional.empty());
+
+        assertEquals(1, circulationService.expireOverduePickups());
+
+        assertEquals(HoldStatus.EXPIRED.name(), overdue.getStatus());
+        assertEquals(PhysicalCopyStatus.AVAILABLE.name(), copy1.getStatus());
     }
 }

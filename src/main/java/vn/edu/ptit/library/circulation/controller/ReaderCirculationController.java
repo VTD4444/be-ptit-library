@@ -11,11 +11,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import vn.edu.ptit.library.circulation.dto.CirculationHistoryItemDto;
+import vn.edu.ptit.library.circulation.dto.MyHoldItemDto;
 import vn.edu.ptit.library.circulation.dto.UserFinesSummaryDto;
 import vn.edu.ptit.library.circulation.service.CirculationService;
 import vn.edu.ptit.library.common.dto.ApiResponse;
 import vn.edu.ptit.library.common.dto.PageResponse;
 import vn.edu.ptit.library.common.dto.PaginationRequest;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/users/me")
@@ -35,6 +38,19 @@ public class ReaderCirculationController {
             @RequestParam(value = "status", required = false) String status,
             @Valid @ModelAttribute PaginationRequest request) {
         return ApiResponse.success(circulationService.getMyCirculationHistory(status, request));
+    }
+
+    @GetMapping("/holds")
+    @PreAuthorize("hasAnyRole('READER', 'LIBRARIAN', 'ADMIN')")
+    @Operation(
+            summary = "Xem danh sach dat truoc ca nhan (Reader)",
+            description = "Loc theo status: bo trong = tat ca; ACTIVE = dang cho + san sang nhan; "
+                    + "hoac WAITING, READY_FOR_PICKUP, FULFILLED, EXPIRED, CANCELLED. "
+                    + "Luot READY_FOR_PICKUP kem ma vach, vi tri ke va han cuoi den nhan sach."
+    )
+    public ApiResponse<List<MyHoldItemDto>> getMyHolds(
+            @RequestParam(value = "status", required = false) String status) {
+        return ApiResponse.success(circulationService.getMyHolds(status));
     }
 
     @GetMapping("/fines")
