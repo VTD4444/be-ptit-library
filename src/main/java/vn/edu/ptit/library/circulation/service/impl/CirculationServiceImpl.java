@@ -54,6 +54,7 @@ import vn.edu.ptit.library.common.enums.PhysicalCopyStatus;
 import vn.edu.ptit.library.common.exception.AppException;
 import vn.edu.ptit.library.common.exception.ErrorCode;
 import vn.edu.ptit.library.common.util.SecurityUtils;
+import vn.edu.ptit.library.notification.service.NotificationService;
 import vn.edu.ptit.library.recommendation.event.InteractionRecordedEvent;
 import vn.edu.ptit.library.security.CustomUserDetails;
 import vn.edu.ptit.library.user.entity.User;
@@ -88,6 +89,7 @@ public class CirculationServiceImpl implements CirculationService {
     private final PenaltyTypeRepository penaltyTypeRepository;
     private final DocumentAuthorRepository documentAuthorRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional
@@ -350,6 +352,18 @@ public class CirculationServiceImpl implements CirculationService {
 
                 copy.setStatus(PhysicalCopyStatus.RESERVED.name());
                 assignedHoldUserCode = nextHold.getUser().getUserCode();
+
+                notificationService.queueNotification(
+                        nextHold.getUser().getId(),
+                        null,
+                        nextHold.getId(),
+                        "IN_APP",
+                        "HOLD_READY",
+                        String.format("Tài liệu \"%s\" (mã vạch %s) đã sẵn sàng nhận tại quầy đến hết ngày %s.",
+                                document.getTitle(),
+                                copy.getBarcode(),
+                                nextHold.getPickupDeadline().toLocalDate())
+                );
             } else {
                 copy.setStatus(PhysicalCopyStatus.AVAILABLE.name());
             }
@@ -567,6 +581,17 @@ public class CirculationServiceImpl implements CirculationService {
                 .build();
 
         HoldQueue savedHold = holdQueueRepository.save(hold);
+
+        notificationService.queueNotification(
+                userId,
+                null,
+                savedHold.getId(),
+                "IN_APP",
+                "HOLD_PLACED",
+                String.format("Bạn đã đặt trước thành công tài liệu \"%s\" (vị trí hàng chờ #%d).",
+                        document.getTitle(),
+                        nextPosition)
+        );
 
         return HoldResponseDto.builder()
                 .holdId(savedHold.getId())

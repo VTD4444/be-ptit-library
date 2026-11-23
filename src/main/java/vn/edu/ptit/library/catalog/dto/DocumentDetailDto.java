@@ -38,6 +38,7 @@ public class DocumentDetailDto {
 
     private long totalPhysicalCopies;
     private long availablePhysicalCopies;
+    private List<PhysicalCopyDto> physicalCopies;
 
     private boolean hasDigitalCopy;
     private UUID digitalCopyId;

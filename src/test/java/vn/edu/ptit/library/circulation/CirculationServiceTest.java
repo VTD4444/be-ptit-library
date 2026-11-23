@@ -78,6 +78,8 @@ class CirculationServiceTest {
     private vn.edu.ptit.library.catalog.repository.DocumentAuthorRepository documentAuthorRepository;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private vn.edu.ptit.library.notification.service.NotificationService notificationService;
 
     @InjectMocks
     private CirculationServiceImpl circulationService;

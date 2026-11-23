@@ -72,7 +72,7 @@ public class NotificationServiceImpl implements NotificationService {
         List<Circulation> overdueLoans = circulationRepository.findOverdueLoans(OffsetDateTime.now());
 
         for (Circulation loan : overdueLoans) {
-            String content = String.format("Sach '%s' cua ban da qua han tra vao ngay %s. Vui long tra sach hoac lien he thu vien.",
+            String content = String.format("Sách '%s' của bạn đã quá hạn trả vào ngày %s. Vui lòng trả sách hoặc liên hệ thư viện.",
                     loan.getPhysicalCopy().getDocument().getTitle(),
                     loan.getDueDate().toLocalDate());
 

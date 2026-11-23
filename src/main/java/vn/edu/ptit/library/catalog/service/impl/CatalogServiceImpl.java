@@ -71,6 +71,26 @@ public class CatalogServiceImpl implements CatalogService {
         Document doc = getDocumentEntityOrThrow(id);
         List<DocumentDepartment> departments = documentDepartmentRepository.findByDocumentId(id);
         Optional<DigitalCopy> digital = digitalCopyRepository.findByDocumentIdAndIsCurrentTrue(id);
+        List<PhysicalCopy> copies = physicalCopyRepository.findByDocumentId(id);
+        List<vn.edu.ptit.library.catalog.dto.PhysicalCopyDto> physicalCopyDtos = copies.stream()
+                .sorted(java.util.Comparator.comparing(
+                        PhysicalCopy::getBarcode,
+                        java.util.Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
+                .map(copy -> vn.edu.ptit.library.catalog.dto.PhysicalCopyDto.builder()
+                        .id(copy.getId())
+                        .documentId(id)
+                        .barcode(copy.getBarcode())
+                        .callNumber(copy.getCallNumber())
+                        .shelfLocation(copy.getShelfLocation())
+                        .status(copy.getStatus())
+                        .condition(copy.getCondition())
+                        .accessionDate(copy.getAccessionDate())
+                        .lastInventoryDate(copy.getLastInventoryDate())
+                        .build())
+                .toList();
+        long availablePhysicalCopies = copies.stream()
+                .filter(copy -> AVAILABLE.equalsIgnoreCase(copy.getStatus()))
+                .count();
 
         SecurityUtils.getCurrentUserDetails()
                 .ifPresent(u -> eventPublisher.publishEvent(InteractionRecordedEvent.viewDetail(u.getId(), doc.getId())));
@@ -92,8 +112,9 @@ public class CatalogServiceImpl implements CatalogService {
                 .metadata(doc.getMetadata())
                 .departmentIds(departments.stream().map(d -> d.getDepartment().getId()).toList())
                 .departmentNames(departments.stream().map(d -> d.getDepartment().getName()).toList())
-                .totalPhysicalCopies(physicalCopyRepository.countByDocumentId(id))
-                .availablePhysicalCopies(physicalCopyRepository.countByDocumentIdAndStatus(id, AVAILABLE))
+                .totalPhysicalCopies(copies.size())
+                .availablePhysicalCopies(availablePhysicalCopies)
+                .physicalCopies(physicalCopyDtos)
                 .hasDigitalCopy(digital.isPresent())
                 .digitalCopyId(digital.map(DigitalCopy::getId).orElse(null))
                 .digitalFileName(digital.map(DigitalCopy::getFileName).orElse(null))
