@@ -26,7 +26,7 @@ public class InteractionLogService {
     private final UserRepository userRepository;
     private final DocumentRepository documentRepository;
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordSyncEvent(InteractionRecordedEvent.Sync event) {
         if (event == null || event.userId() == null || event.documentId() == null) {
             return;
@@ -45,20 +45,15 @@ public class InteractionLogService {
         if (event == null || event.userId() == null || event.documentId() == null || !event.eventType().isAsyncReadEvent()) {
             return;
         }
-        try {
-            OffsetDateTime cutoff = OffsetDateTime.now().minusMinutes(READ_DEDUP_MINUTES);
-            boolean recentlyLogged = interactionLogRepository
-                    .existsByUserIdAndDocumentIdAndEventTypeAndCreatedAtAfter(
-                            event.userId(), event.documentId(), event.eventType().name(), cutoff);
-            if (recentlyLogged) {
-                return;
-            }
-            saveLog(event.userId(), event.documentId(), event.eventType(), null,
-                    event.eventType().getDefaultWeight());
-        } catch (Exception ex) {
-            log.warn("Khong ghi duoc interaction log {} cho user={} doc={}: {}",
-                    event.eventType(), event.userId(), event.documentId(), ex.getMessage());
+        OffsetDateTime cutoff = OffsetDateTime.now().minusMinutes(READ_DEDUP_MINUTES);
+        boolean recentlyLogged = interactionLogRepository
+                .existsByUserIdAndDocumentIdAndEventTypeAndCreatedAtAfter(
+                        event.userId(), event.documentId(), event.eventType().name(), cutoff);
+        if (recentlyLogged) {
+            return;
         }
+        saveLog(event.userId(), event.documentId(), event.eventType(), null,
+                event.eventType().getDefaultWeight());
     }
 
     private void handleFavorite(UUID userId, UUID documentId, boolean removeFavorite) {
