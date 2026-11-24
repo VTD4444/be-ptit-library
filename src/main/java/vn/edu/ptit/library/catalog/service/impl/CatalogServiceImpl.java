@@ -35,10 +35,13 @@ import vn.edu.ptit.library.recommendation.event.InteractionRecordedEvent;
 import vn.edu.ptit.library.user.entity.Department;
 import vn.edu.ptit.library.user.repository.DepartmentRepository;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -62,14 +65,57 @@ public class CatalogServiceImpl implements CatalogService {
     @Transactional(readOnly = true)
     public PageResponse<DocumentSummaryDto> searchDocuments(DocumentFilterRequest filter, PaginationRequest request) {
         Page<Document> page = documentRepository.findAll(DocumentSpecification.filter(filter), request.toPageable());
-        return PageResponse.from(page, this::toSummaryDto);
+        List<Document> documents = page.getContent();
+        if (documents.isEmpty()) {
+            return PageResponse.from(page, doc -> null);
+        }
+
+        List<UUID> documentIds = documents.stream()
+                .map(Document::getId)
+                .toList();
+
+        Map<UUID, List<String>> authorsByDoc = new HashMap<>();
+        for (DocumentAuthor da : documentAuthorRepository.findByDocumentIdInWithAuthor(documentIds)) {
+            if (da.getAuthor() != null && da.getAuthor().getName() != null) {
+                authorsByDoc.computeIfAbsent(da.getId().getDocumentId(), k -> new ArrayList<>())
+                        .add(da.getAuthor().getName());
+            }
+        }
+
+        Map<UUID, long[]> copiesByDoc = new HashMap<>();
+        for (Object[] row : physicalCopyRepository.countCopiesByDocumentIds(documentIds)) {
+            UUID docId = (UUID) row[0];
+            long total = row[1] != null ? ((Number) row[1]).longValue() : 0L;
+            long available = row[2] != null ? ((Number) row[2]).longValue() : 0L;
+            copiesByDoc.put(docId, new long[]{total, available});
+        }
+
+        Set<UUID> docsWithDigital = new HashSet<>(
+                digitalCopyRepository.findDocumentIdsWithCurrentDigitalCopy(documentIds));
+
+        return PageResponse.from(page, doc -> {
+            UUID id = doc.getId();
+            long[] counts = copiesByDoc.getOrDefault(id, new long[]{0L, 0L});
+            return DocumentSummaryDto.builder()
+                    .id(id)
+                    .title(doc.getTitle())
+                    .authors(authorsByDoc.getOrDefault(id, List.of()))
+                    .coverUrl(getCoverUrl(doc))
+                    .abstractText(doc.getAbstractText())
+                    .docType(doc.getDocType())
+                    .publicationYear(doc.getPublicationYear())
+                    .totalPhysicalCopies(counts[0])
+                    .availablePhysicalCopies(counts[1])
+                    .hasDigitalCopy(docsWithDigital.contains(id))
+                    .build();
+        });
     }
 
     @Override
     @Transactional(readOnly = true)
     public DocumentDetailDto getDocumentDetails(UUID id) {
         Document doc = getDocumentEntityOrThrow(id);
-        List<DocumentDepartment> departments = documentDepartmentRepository.findByDocumentId(id);
+        List<DocumentDepartment> departments = documentDepartmentRepository.findByDocumentIdWithDepartment(id);
         Optional<DigitalCopy> digital = digitalCopyRepository.findByDocumentIdAndIsCurrentTrue(id);
         List<PhysicalCopy> copies = physicalCopyRepository.findByDocumentId(id);
         List<vn.edu.ptit.library.catalog.dto.PhysicalCopyDto> physicalCopyDtos = copies.stream()
@@ -266,25 +312,8 @@ public class CatalogServiceImpl implements CatalogService {
         }
     }
 
-    private DocumentSummaryDto toSummaryDto(Document doc) {
-        UUID id = doc.getId();
-
-        return DocumentSummaryDto.builder()
-                .id(id)
-                .title(doc.getTitle())
-                .authors(getAuthorNames(id))
-                .coverUrl(getCoverUrl(doc))
-                .abstractText(doc.getAbstractText())
-                .docType(doc.getDocType())
-                .publicationYear(doc.getPublicationYear())
-                .totalPhysicalCopies(physicalCopyRepository.countByDocumentId(id))
-                .availablePhysicalCopies(physicalCopyRepository.countByDocumentIdAndStatus(id, AVAILABLE))
-                .hasDigitalCopy(digitalCopyRepository.findByDocumentIdAndIsCurrentTrue(id).isPresent())
-                .build();
-    }
-
     private List<String> getAuthorNames(UUID documentId) {
-        return documentAuthorRepository.findByDocumentIdOrderByAuthorOrderAsc(documentId)
+        return documentAuthorRepository.findByDocumentIdInWithAuthor(List.of(documentId))
                 .stream()
                 .map(DocumentAuthor::getAuthor)
                 .filter(a -> a != null && a.getName() != null)

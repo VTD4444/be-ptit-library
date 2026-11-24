@@ -2,6 +2,7 @@ package vn.edu.ptit.library.circulation.repository;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -20,12 +21,16 @@ public interface CirculationRepository extends JpaRepository<Circulation, Long> 
 
     long countByUserIdAndReturnDateIsNull(UUID userId);
 
+    @EntityGraph(attributePaths = {"physicalCopy", "physicalCopy.document"})
     Page<Circulation> findByUserId(UUID userId, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"physicalCopy", "physicalCopy.document"})
     Page<Circulation> findByUserIdAndReturnDateIsNull(UUID userId, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"physicalCopy", "physicalCopy.document"})
     Page<Circulation> findByUserIdAndReturnDateIsNotNull(UUID userId, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"physicalCopy", "physicalCopy.document"})
     @Query("SELECT c FROM Circulation c WHERE c.user.id = :userId AND c.returnDate IS NULL AND c.dueDate < :now")
     Page<Circulation> findOverdueByUserId(@Param("userId") UUID userId, @Param("now") OffsetDateTime now, Pageable pageable);
 

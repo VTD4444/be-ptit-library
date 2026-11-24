@@ -71,6 +71,20 @@ class MicrosoftAuthServiceTest {
         assertEquals(2020, directCode.enrollmentYear());
         assertEquals(UserType.STUDENT.name(), directCode.userType());
 
+        var shortCode = PtitEmailParser.parse("ducdvt.b22pt058@stu.ptit.edu.vn");
+        assertEquals("B22DCPT058", shortCode.userCode());
+        assertEquals(2022, shortCode.enrollmentYear());
+        assertEquals(UserType.STUDENT.name(), shortCode.userType());
+
+        var shortCnCode = PtitEmailParser.parse("an.nv.b21cn001@stu.ptit.edu.vn");
+        assertEquals("B21DCCN001", shortCnCode.userCode());
+        assertEquals(2021, shortCnCode.enrollmentYear());
+
+        assertEquals("Dinh Vu Trung Duc", PtitEmailParser.cleanFullName("Dinh Vu Trung Duc D22PT02"));
+        assertEquals("Nguyen Van An", PtitEmailParser.cleanFullName("Nguyen Van An D21CQCN01-B"));
+        assertEquals("Tran Thi Binh", PtitEmailParser.cleanFullName("Tran Thi Binh (D22CQAT02-N)"));
+        assertEquals("Nguyen Van An", PtitEmailParser.cleanFullName("Nguyen Van An"));
+
         var lecturer = PtitEmailParser.parse("nguyenvana@ptit.edu.vn");
         assertEquals("NGUYENVANA", lecturer.userCode());
         assertNull(lecturer.enrollmentYear());
@@ -136,6 +150,41 @@ class MicrosoftAuthServiceTest {
         verify(userProfileRepository).save(any(UserProfile.class));
         assertEquals("student-access", response.getAccessToken());
         assertEquals("B21DCCN001", response.getUser().getUserCode());
+    }
+
+    @Test
+    void loginWithMicrosoft_shortPtitEmailAndClassSuffixName_shouldInsertDcAndStripClassCode() {
+        UUID generatedId = UUID.randomUUID();
+        when(microsoftTokenVerifier.verifyIdToken("ms-short-token"))
+                .thenReturn(new MicrosoftUserClaims(
+                        "oid-4",
+                        "tid-ptit",
+                        "ducdvt.b22pt058@stu.ptit.edu.vn",
+                        "Dinh Vu Trung Duc D22PT02"
+                ));
+        when(userRepository.findByEmailIgnoreCase("ducdvt.b22pt058@stu.ptit.edu.vn")).thenReturn(Optional.empty());
+        when(microsoftAuthProperties.isAutoProvision()).thenReturn(true);
+        when(userRepository.existsByUserCodeIgnoreCase("B22DCPT058")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            u.setId(generatedId);
+            return u;
+        });
+        when(tokenProvider.generateAccessToken(generatedId, "ducdvt.b22pt058@stu.ptit.edu.vn", "B22DCPT058", "READER"))
+                .thenReturn("duc-access");
+        when(tokenProvider.generateRefreshToken(generatedId)).thenReturn("duc-refresh");
+
+        TokenResponse response = authService.loginWithMicrosoft(new MicrosoftLoginRequest("ms-short-token"));
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(userCaptor.capture());
+        User created = userCaptor.getValue();
+        assertEquals("B22DCPT058", created.getUserCode());
+        assertEquals("Dinh Vu Trung Duc", created.getFullName());
+        assertEquals(2022, created.getEnrollmentYear());
+        assertEquals("STUDENT", created.getUserType());
+        assertEquals("B22DCPT058", response.getUser().getUserCode());
+        assertEquals("Dinh Vu Trung Duc", response.getUser().getFullName());
     }
 
     @Test

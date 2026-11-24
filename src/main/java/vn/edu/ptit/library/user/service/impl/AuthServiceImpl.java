@@ -69,8 +69,9 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findByEmailIgnoreCase(email)
                 .map(existing -> {
                     assertAccountActive(existing);
-                    if (!StringUtils.hasText(existing.getFullName()) && StringUtils.hasText(claims.fullName())) {
-                        existing.setFullName(claims.fullName().trim());
+                    String cleanedName = PtitEmailParser.cleanFullName(claims.fullName());
+                    if (!StringUtils.hasText(existing.getFullName()) && StringUtils.hasText(cleanedName)) {
+                        existing.setFullName(cleanedName);
                         return userRepository.save(existing);
                     }
                     return existing;
@@ -172,7 +173,8 @@ public class AuthServiceImpl implements AuthService {
 
         PtitEmailParser.ParsedPtitEmail parsed = PtitEmailParser.parse(email);
         String userCode = generateUniqueUserCode(parsed.userCode());
-        String fullName = StringUtils.hasText(claims.fullName()) ? claims.fullName().trim() : userCode;
+        String cleanedName = PtitEmailParser.cleanFullName(claims.fullName());
+        String fullName = StringUtils.hasText(cleanedName) ? cleanedName : userCode;
 
         User newUser = User.builder()
                 .userCode(userCode)

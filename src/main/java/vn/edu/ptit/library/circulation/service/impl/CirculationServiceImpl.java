@@ -63,8 +63,10 @@ import vn.edu.ptit.library.user.repository.UserRepository;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -563,6 +565,23 @@ public class CirculationServiceImpl implements CirculationService {
             page = circulationRepository.findByUserId(userId, pageable);
         }
 
+        List<Circulation> loans = page.getContent();
+        if (loans.isEmpty()) {
+            return PageResponse.from(page, c -> null);
+        }
+
+        List<Long> circulationIds = loans.stream()
+                .map(Circulation::getId)
+                .toList();
+        Map<Long, Long> finesByCirculationId = new HashMap<>();
+        for (Object[] row : circulationFineRepository.sumFineAmountsByCirculationIds(circulationIds)) {
+            if (row[0] != null) {
+                Long circId = ((Number) row[0]).longValue();
+                Long total = row[1] != null ? ((Number) row[1]).longValue() : 0L;
+                finesByCirculationId.put(circId, total);
+            }
+        }
+
         return PageResponse.from(page, c -> {
             PhysicalCopy copy = c.getPhysicalCopy();
             Document doc = copy.getDocument();
@@ -578,7 +597,7 @@ public class CirculationServiceImpl implements CirculationService {
                         : "BORROWING";
             }
 
-            Long fineSum = circulationFineRepository.sumFineAmountByCirculationId(c.getId());
+            long fineSum = finesByCirculationId.getOrDefault(c.getId(), 0L);
 
             return CirculationHistoryItemDto.builder()
                     .circulationId(c.getId())
@@ -592,7 +611,7 @@ public class CirculationServiceImpl implements CirculationService {
                     .returnDate(c.getReturnDate())
                     .renewalsCount(c.getRenewalsCount() != null ? c.getRenewalsCount() : 0)
                     .status(loanStatus)
-                    .fineAmount(fineSum != null ? fineSum : 0L)
+                    .fineAmount(fineSum)
                     .build();
         });
     }
@@ -887,7 +906,7 @@ public class CirculationServiceImpl implements CirculationService {
                         .build())
                 .orElse(null);
 
-        List<String> authors = documentAuthorRepository.findByDocumentIdOrderByAuthorOrderAsc(doc.getId()).stream()
+        List<String> authors = documentAuthorRepository.findByDocumentIdInWithAuthor(List.of(doc.getId())).stream()
                 .map(DocumentAuthor::getAuthor)
                 .filter(a -> a != null && a.getName() != null)
                 .map(Author::getName)

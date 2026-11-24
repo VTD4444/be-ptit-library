@@ -437,7 +437,7 @@ class CirculationServiceTest {
         when(penaltyTypeRepository.findByCode("OVERDUE")).thenReturn(Optional.of(overdue));
         when(holdQueueRepository.findByPhysicalCopyIdAndStatus(copy1.getId(), HoldStatus.READY_FOR_PICKUP.name()))
                 .thenReturn(Optional.empty());
-        when(documentAuthorRepository.findByDocumentIdOrderByAuthorOrderAsc(document.getId())).thenReturn(Collections.emptyList());
+        when(documentAuthorRepository.findByDocumentIdInWithAuthor(List.of(document.getId()))).thenReturn(Collections.emptyList());
 
         var dto = circulationService.lookupCopy(" 893524480001 ");
 
@@ -547,7 +547,7 @@ class CirculationServiceTest {
         when(circulationRepository.findByUserIdAndReturnDateIsNull(
                 org.mockito.ArgumentMatchers.eq(reader.getId()), any(org.springframework.data.domain.Pageable.class)))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(activeLoan)));
-        when(circulationFineRepository.sumFineAmountByCirculationId(260L)).thenReturn(0L);
+        when(circulationFineRepository.sumFineAmountsByCirculationIds(List.of(260L))).thenReturn(Collections.emptyList());
 
         vn.edu.ptit.library.common.dto.PaginationRequest pagination =
                 new vn.edu.ptit.library.common.dto.PaginationRequest();
