@@ -6,13 +6,16 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import vn.edu.ptit.library.circulation.dto.BorrowRequestDto;
 import vn.edu.ptit.library.circulation.dto.BorrowResponseDto;
+import vn.edu.ptit.library.circulation.dto.CirculationHistoryItemDto;
 import vn.edu.ptit.library.circulation.dto.CopyLookupDto;
 import vn.edu.ptit.library.circulation.dto.RenewRequestDto;
 import vn.edu.ptit.library.circulation.dto.RenewResponseDto;
@@ -20,6 +23,10 @@ import vn.edu.ptit.library.circulation.dto.ReturnRequestDto;
 import vn.edu.ptit.library.circulation.dto.ReturnResponseDto;
 import vn.edu.ptit.library.circulation.service.CirculationService;
 import vn.edu.ptit.library.common.dto.ApiResponse;
+import vn.edu.ptit.library.common.dto.PageResponse;
+import vn.edu.ptit.library.common.dto.PaginationRequest;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/circulation")
@@ -72,5 +79,18 @@ public class CirculationController {
     public ApiResponse<RenewResponseDto> renewLoan(@Valid @RequestBody RenewRequestDto request) {
         RenewResponseDto response = circulationService.renewLoan(request);
         return ApiResponse.success(response.getMessage(), response);
+    }
+
+    @GetMapping("/users/{userId}/history")
+    @PreAuthorize("hasAnyRole('LIBRARIAN', 'ADMIN')")
+    @Operation(
+            summary = "Xem lich su muon tra cua mot ban doc (Librarian, Admin)",
+            description = "Tra ve danh sach tai lieu dang muon, qua han hoac da tra cua ban doc theo userId."
+    )
+    public ApiResponse<PageResponse<CirculationHistoryItemDto>> getUserCirculationHistory(
+            @PathVariable("userId") UUID userId,
+            @RequestParam(value = "status", required = false) String status,
+            @Valid @ModelAttribute PaginationRequest request) {
+        return ApiResponse.success(circulationService.getUserCirculationHistory(userId, status, request));
     }
 }

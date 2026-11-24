@@ -319,6 +319,46 @@ public class CirculationServiceImpl implements CirculationService {
             totalFineAmount += unitPrice;
         }
 
+        // 2b. Phat bo sung tai quay (neu thu thu nhap them)
+        boolean hasAdditionalFine = (request.getAdditionalFineAmount() != null && request.getAdditionalFineAmount() > 0)
+                || request.getAdditionalPenaltyTypeId() != null;
+        if (hasAdditionalFine) {
+            PenaltyType additionalPenalty;
+            if (request.getAdditionalPenaltyTypeId() != null) {
+                additionalPenalty = penaltyTypeRepository.findById(request.getAdditionalPenaltyTypeId())
+                        .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND,
+                                "Không tìm thấy loại hình phạt bổ sung với ID: " + request.getAdditionalPenaltyTypeId()));
+            } else {
+                additionalPenalty = getOrCreatePenaltyType(
+                        "OTHER", "Phạt bổ sung tại quầy", "Lần", 0L);
+            }
+
+            long additionalAmount = (request.getAdditionalFineAmount() != null && request.getAdditionalFineAmount() > 0)
+                    ? request.getAdditionalFineAmount()
+                    : (additionalPenalty.getUnitPrice() != null ? additionalPenalty.getUnitPrice() : 0L);
+
+            if (additionalAmount > 0) {
+                String fineNote = StringUtils.hasText(request.getAdditionalFineNote())
+                        ? request.getAdditionalFineNote().trim()
+                        : (StringUtils.hasText(request.getReturnNote())
+                                ? request.getReturnNote().trim()
+                                : additionalPenalty.getName());
+
+                CirculationFine extraFine = CirculationFine.builder()
+                        .circulation(circulation)
+                        .penaltyType(additionalPenalty)
+                        .quantity(1)
+                        .fineAmount(additionalAmount)
+                        .status(FineStatus.UNPAID.name())
+                        .note(fineNote)
+                        .build();
+
+                CirculationFine savedExtraFine = circulationFineRepository.save(extraFine);
+                generatedFines.add(toFineItemDto(savedExtraFine, copy.getBarcode(), document.getTitle()));
+                totalFineAmount += additionalAmount;
+            }
+        }
+
         // 3. Cap nhat trang thai ban sach & kiem tra hang cho dat truoc (HoldQueue)
         String assignedHoldUserCode = null;
         if (condition == BookReturnCondition.LOST) {
@@ -486,7 +526,20 @@ public class CirculationServiceImpl implements CirculationService {
     @Transactional(readOnly = true)
     public PageResponse<CirculationHistoryItemDto> getMyCirculationHistory(String status, PaginationRequest request) {
         UUID currentUserId = SecurityUtils.getCurrentUserIdOrThrow();
+        return getCirculationHistoryForUser(currentUserId, status, request);
+    }
 
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<CirculationHistoryItemDto> getUserCirculationHistory(UUID userId, String status, PaginationRequest request) {
+        if (!userRepository.existsById(userId)) {
+            throw new AppException(ErrorCode.USER_NOT_FOUND);
+        }
+        return getCirculationHistoryForUser(userId, status, request);
+    }
+
+    private PageResponse<CirculationHistoryItemDto> getCirculationHistoryForUser(
+            UUID userId, String status, PaginationRequest request) {
         // Bang circulation su dung cot borrowDate thay vi createdAt
         String sortBy = request.getSortBy();
         if (!StringUtils.hasText(sortBy) || "createdAt".equalsIgnoreCase(sortBy)) {
@@ -501,13 +554,13 @@ public class CirculationServiceImpl implements CirculationService {
         OffsetDateTime now = OffsetDateTime.now();
 
         if ("BORROWING".equalsIgnoreCase(status)) {
-            page = circulationRepository.findByUserIdAndReturnDateIsNull(currentUserId, pageable);
+            page = circulationRepository.findByUserIdAndReturnDateIsNull(userId, pageable);
         } else if ("RETURNED".equalsIgnoreCase(status)) {
-            page = circulationRepository.findByUserIdAndReturnDateIsNotNull(currentUserId, pageable);
+            page = circulationRepository.findByUserIdAndReturnDateIsNotNull(userId, pageable);
         } else if ("OVERDUE".equalsIgnoreCase(status)) {
-            page = circulationRepository.findOverdueByUserId(currentUserId, now, pageable);
+            page = circulationRepository.findOverdueByUserId(userId, now, pageable);
         } else {
-            page = circulationRepository.findByUserId(currentUserId, pageable);
+            page = circulationRepository.findByUserId(userId, pageable);
         }
 
         return PageResponse.from(page, c -> {

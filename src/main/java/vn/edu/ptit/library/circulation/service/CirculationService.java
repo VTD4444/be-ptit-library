@@ -19,6 +19,7 @@ import vn.edu.ptit.library.common.dto.PageResponse;
 import vn.edu.ptit.library.common.dto.PaginationRequest;
 
 import java.util.List;
+import java.util.UUID;
 
 public interface CirculationService {
 
@@ -29,6 +30,8 @@ public interface CirculationService {
     RenewResponseDto renewLoan(RenewRequestDto request);
 
     PageResponse<CirculationHistoryItemDto> getMyCirculationHistory(String status, PaginationRequest request);
+
+    PageResponse<CirculationHistoryItemDto> getUserCirculationHistory(UUID userId, String status, PaginationRequest request);
 
     HoldResponseDto placeHold(HoldRequestDto request);
 

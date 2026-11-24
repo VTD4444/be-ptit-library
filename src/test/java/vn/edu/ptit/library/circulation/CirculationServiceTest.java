@@ -481,4 +481,84 @@ class CirculationServiceTest {
         assertEquals(HoldStatus.EXPIRED.name(), overdue.getStatus());
         assertEquals(PhysicalCopyStatus.AVAILABLE.name(), copy1.getStatus());
     }
+
+    @Test
+    void returnBook_withAdditionalFine_shouldCreateExtraFineAndIncludeInTotal() {
+        copy1.setStatus(PhysicalCopyStatus.BORROWED.name());
+        Circulation activeLoan = Circulation.builder()
+                .id(250L)
+                .user(reader)
+                .physicalCopy(copy1)
+                .borrowDate(OffsetDateTime.now().minusDays(5))
+                .dueDate(OffsetDateTime.now().plusDays(9))
+                .build();
+
+        PenaltyType customPenalty = PenaltyType.builder()
+                .id(9L)
+                .code("STAINED")
+                .name("Phat lam ban tai lieu")
+                .unitName("Lan")
+                .unitPrice(30000L)
+                .build();
+
+        when(physicalCopyRepository.findByBarcode("893524480001")).thenReturn(Optional.of(copy1));
+        when(circulationRepository.findByPhysicalCopyIdAndReturnDateIsNull(copy1.getId()))
+                .thenReturn(Optional.of(activeLoan));
+        when(penaltyTypeRepository.findById(9L)).thenReturn(Optional.of(customPenalty));
+        when(circulationFineRepository.save(any(CirculationFine.class))).thenAnswer(inv -> {
+            CirculationFine fine = inv.getArgument(0);
+            fine.setId(350L);
+            return fine;
+        });
+        when(holdQueueRepository.findFirstByDocumentIdAndStatusOrderByQueuePositionAsc(
+                document.getId(), HoldStatus.WAITING.name())).thenReturn(Optional.empty());
+
+        ReturnRequestDto request = ReturnRequestDto.builder()
+                .barcode("893524480001")
+                .condition(BookReturnCondition.NORMAL)
+                .additionalPenaltyTypeId(9L)
+                .additionalFineAmount(45000L)
+                .additionalFineNote("Bia sach bi dinh ca phe")
+                .build();
+
+        ReturnResponseDto response = circulationService.returnBook(request);
+
+        assertEquals(0L, response.getOverdueDays());
+        assertEquals(45000L, response.getTotalFineAmount());
+        assertEquals(1, response.getGeneratedFines().size());
+        assertEquals("STAINED", response.getGeneratedFines().get(0).getPenaltyCode());
+        assertEquals(45000L, response.getGeneratedFines().get(0).getFineAmount());
+        assertEquals("Bia sach bi dinh ca phe", response.getGeneratedFines().get(0).getNote());
+        assertEquals(PhysicalCopyStatus.AVAILABLE.name(), response.getUpdatedCopyStatus());
+    }
+
+    @Test
+    void getUserCirculationHistory_shouldReturnHistoryPageForTargetReader() {
+        Circulation activeLoan = Circulation.builder()
+                .id(260L)
+                .user(reader)
+                .physicalCopy(copy1)
+                .borrowDate(OffsetDateTime.now().minusDays(3))
+                .dueDate(OffsetDateTime.now().plusDays(11))
+                .renewalsCount(0)
+                .build();
+
+        when(userRepository.existsById(reader.getId())).thenReturn(true);
+        when(circulationRepository.findByUserIdAndReturnDateIsNull(
+                org.mockito.ArgumentMatchers.eq(reader.getId()), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(activeLoan)));
+        when(circulationFineRepository.sumFineAmountByCirculationId(260L)).thenReturn(0L);
+
+        vn.edu.ptit.library.common.dto.PaginationRequest pagination =
+                new vn.edu.ptit.library.common.dto.PaginationRequest();
+        pagination.setPage(0);
+        pagination.setSize(10);
+
+        var result = circulationService.getUserCirculationHistory(reader.getId(), "BORROWING", pagination);
+
+        assertEquals(1, result.getItems().size());
+        assertEquals(260L, result.getItems().get(0).getCirculationId());
+        assertEquals("BORROWING", result.getItems().get(0).getStatus());
+        assertEquals("893524480001", result.getItems().get(0).getBarcode());
+    }
 }

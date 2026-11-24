@@ -1,5 +1,6 @@
 package vn.edu.ptit.library.circulation.dto;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -22,4 +23,11 @@ public class ReturnRequestDto {
     private BookReturnCondition condition = BookReturnCondition.NORMAL;
 
     private String returnNote;
+
+    private Long additionalPenaltyTypeId;
+
+    @Min(value = 0, message = "So tien phat bo sung khong duoc am")
+    private Long additionalFineAmount;
+
+    private String additionalFineNote;
 }
